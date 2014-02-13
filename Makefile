@@ -1,5 +1,6 @@
 # Project directory layout
 #
+# Makefile
 # server.c
 # client.c
 # include/
@@ -13,7 +14,7 @@ OBJDIR = obj
 SRCDIR = src
 
 CC = gcc
-CFLAGS = -I$(INCDIR) -Wall -Werror -O1 -ggdb -std=c99
+CFLAGS = -I$(INCDIR) -Wall -Werror -O1 -ggdb -std=c99 -m32
 LIBS = -lm -lpthread
 
 DEPS = $(wildcard $(INCDIR)/*.h)
