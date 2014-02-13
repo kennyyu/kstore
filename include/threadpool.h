@@ -3,4 +3,7 @@
 
 struct threadpool;
 
+struct threadpool *threadpool_create(unsigned nthreads);
+void threadpool_destroy(struct threadpool *tpool);
+
 #endif

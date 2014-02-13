@@ -26,10 +26,10 @@ $(OBJDIR)/%.o: $(SRCDIR)/%.c $(DEPS)
 
 all: server client
 
-server: server.o $(OBJS)
+server: $(OBJS) server.o
 	$(CC) -o $@ $^ $(CFLAGS) $(LIBS)
 
-client: client.o $(OBJS)
+client: $(OBJS) client.o
 	$(CC) -o $@ $^ $(CFLAGS) $(LIBS)
 
 clean:
