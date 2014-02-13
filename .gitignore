@@ -1,0 +1,6 @@
+*~
+#*
+*.o
+obj
+server
+client
