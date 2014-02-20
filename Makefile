@@ -3,12 +3,24 @@
 # Makefile
 # server.c
 # client.c
-# include/
-#   *.h
 # src/
-#   *.c
+#   client/
+#     include/
+#       *.h
+#     *.c
+#   server/
+#     include/
+#       *.h
+#     *.c
+#   common/
+#     include/
+#       *.h
+#     *.c
+#   *.h
 # obj/
-#   *.o
+#   client/
+#   server/
+#   common/
 INCDIR = include
 OBJDIR = obj
 SRCDIR = src
@@ -45,10 +57,6 @@ CC = gcc
 CFLAGS = -Wall -Werror -O1 -ggdb -std=gnu99 -m32
 LIBS = -lm -lpthread
 
-#DEPS = $(wildcard $(INCDIR)/*.h)
-#SRCS = $(wildcard $(SRCDIR)/*.c)
-#OBJS = $(addprefix $(OBJDIR)/,$(notdir $(SRCS:.c=.o)))
-
 $(COMMON_OBJDIR)/%.o: $(COMMON_SRCDIR)/%.c $(COMMON_DEPS)
 	mkdir -p $(COMMON_OBJDIR)
 	$(CC) -c -o $@ $< $(CFLAGS) -I$(COMMON_INCDIR)
@@ -60,10 +68,6 @@ $(SERVER_OBJDIR)/%.o: $(SERVER_SRCDIR)/%.c $(SERVER_DEPS) $(COMMON_OBJS) $(COMMO
 $(CLIENT_OBJDIR)/%.o: $(CLIENT_SRCDIR)/%.c $(CLIENT_DEPS) $(COMMON_OBJS) $(COMMON_DEPS)
 	mkdir -p $(CLIENT_OBJDIR)
 	$(CC) -c -o $@ $< $(CFLAGS) -I$(CLIENT_INCDIR) -I$(COMMON_INCDIR)
-
-#$(OBJDIR)/%.o: $(SRCDIR)/%.c $(DEPS)
-#	mkdir -p $(OBJDIR)
-#	$(CC) -c -o $@ $< $(CFLAGS)
 
 all: server client
 
