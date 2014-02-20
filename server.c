@@ -1,6 +1,7 @@
 #include <arpa/inet.h>
 #include <assert.h>
 #include <errno.h>
+#include <netdb.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -11,7 +12,7 @@
 #include <unistd.h>
 #include "include/threadpool.h"
 
-#define PORT 5000
+#define PORT "5000"
 #define BACKLOG 16
 
 // boolean to tell the server to keep looping
@@ -36,17 +37,43 @@ main(void)
 
     int result;
     int listenfd, acceptfd;
-    struct sockaddr_in serv_addr;
+    //struct sockaddr_in serv_addr;
+    struct addrinfo hints, *servinfo;
+    int yes = 1;
+
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_flags = AI_PASSIVE;
+    result = getaddrinfo(NULL, PORT, &hints, &servinfo);
+    if (result != 0) {
+        perror("getaddrinfo");
+        result = -1;
+        goto done;
+    }
 
     // create a file descriptor to listen for connections
-    listenfd = socket(AF_INET, SOCK_STREAM, 0);
+    listenfd = socket(servinfo->ai_family, servinfo->ai_socktype,
+                      servinfo->ai_protocol);
     if (listenfd == -1) {
         perror("socket");
         result = listenfd;
         goto done;
     }
+    result = setsockopt(listenfd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int));
+    if (result == -1) {
+        perror("setsockopt");
+        goto done;
+    }
+    result = bind(listenfd, servinfo->ai_addr, servinfo->ai_addrlen);
+    if (result == -1) {
+        perror("bind");
+        goto done;
+    }
+    freeaddrinfo(servinfo);
 
     // bind the file descriptor to a port
+    /*
     memset(&serv_addr, 0, sizeof(serv_addr));
     serv_addr.sin_family = AF_INET;
     serv_addr.sin_addr.s_addr = htonl(INADDR_ANY);
@@ -56,7 +83,7 @@ main(void)
     if (result == -1) {
         perror("bind");
         goto done;
-    }
+    }*/
 
     // put the socket in listening mode
     result = listen(listenfd, BACKLOG);
