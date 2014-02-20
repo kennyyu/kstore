@@ -14,7 +14,7 @@ OBJDIR = obj
 SRCDIR = src
 
 CC = gcc
-CFLAGS = -I$(INCDIR) -Wall -Werror -O1 -ggdb -std=c99 -m32
+CFLAGS = -I$(INCDIR) -Wall -Werror -O1 -ggdb -std=gnu99 -m32
 LIBS = -lm -lpthread
 
 DEPS = $(wildcard $(INCDIR)/*.h)
