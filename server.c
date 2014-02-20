@@ -94,6 +94,7 @@ main(void)
     // create a threadpool to handle the connections
     struct threadpool *tpool = threadpool_create(NTHREADS);
     if (tpool == NULL) {
+        perror("threadpool");
         goto cleanup_listenfd;
     }
 

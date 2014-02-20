@@ -52,8 +52,9 @@ thread_worker(void *arg)
         lock_release(tpool->tp_lock);
 
         // TODO: pop job off queue and run it
+        printf("thread %d handling job...\n", tnum);
         sleep(random() % 10);
-        printf("thread %d handling job\n", tnum);
+        printf("thread %d handling job done.\n", tnum);
     }
 
   shutdown:
