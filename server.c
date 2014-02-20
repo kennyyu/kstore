@@ -31,9 +31,6 @@ sigint_handler(int sig)
 int
 main(void)
 {
-    struct threadpool *tpool = threadpool_create(NTHREADS);
-    assert(tpool != NULL);
-    threadpool_destroy(tpool);
     printf("hello server\n");
 
     int result;
@@ -94,6 +91,12 @@ main(void)
         goto done;
     }
 
+    // create a threadpool to handle the connections
+    struct threadpool *tpool = threadpool_create(NTHREADS);
+    if (tpool == NULL) {
+        goto cleanup_listenfd;
+    }
+
     // accept in a loop, waiting for more connections
     char buf[1024];
     while (keep_running) {
@@ -110,10 +113,11 @@ main(void)
     }
 
   shutdown:
-    printf("shutdown\n");
+    printf("shutting down...\n");
+    threadpool_destroy(tpool);
     result = 0;
   cleanup_listenfd:
     assert(close(listenfd) == 0);
-  done:
+  done:;
     return result;
 }

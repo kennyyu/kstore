@@ -3,7 +3,15 @@
 
 struct threadpool;
 
+struct job {
+    int j_sockfd; // file descriptor for client connection
+};
+
 struct threadpool *threadpool_create(unsigned nthreads);
 void threadpool_destroy(struct threadpool *tpool);
+
+// return 0 on success, otherwise error.
+// the threadpool will create its own copy of job
+int threadpool_add_job(struct threadpool *tpool, struct job *job);
 
 #endif
