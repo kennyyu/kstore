@@ -66,9 +66,13 @@ main(void)
     }
 
     // install a SIGINT handler for graceful shutdown
-    if (signal(SIGINT, sigint_handler) == SIG_ERR) {
-        perror("signal");
-        result = -1;
+    struct sigaction sig;
+    sig.sa_handler = sigint_handler;
+    sig.sa_flags = 0;
+    sigemptyset( &sig.sa_mask );
+    result = sigaction( SIGINT, &sig, NULL );
+    if (result == -1) {
+        perror("sigaction");
         goto done;
     }
 
@@ -87,8 +91,7 @@ main(void)
         close(acceptfd);
     }
 
-    printf("shutdown");
-
   done:
+    printf("shutdown\n");
     return result;
 }

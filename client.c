@@ -1,11 +1,11 @@
-#include <sys/socket.h>
-#include <sys/types.h>
-#include <netdb.h>
 #include <arpa/inet.h>
 #include <errno.h>
+#include <netdb.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/socket.h>
+#include <sys/types.h>
 #include <unistd.h>
 
 #define PORT "5000"
@@ -18,19 +18,8 @@ main(void)
 
     int result;
     int sockfd;
-
-    // create a socket file descriptor
-    /*
-    sockfd = socket(AF_INET, SOCK_STREAM, 0);
-    if (sockfd == -1) {
-        perror("socket");
-        result = -1;
-        goto done;
-    }
-    */
-
-    // connect to the server
     struct addrinfo hints, *servinfo;
+
     memset(&hints, 0, sizeof(hints));
     hints.ai_family = AF_UNSPEC;
     hints.ai_socktype = SOCK_STREAM;
@@ -55,25 +44,6 @@ main(void)
         perror("connect");
         goto done;
     }
-
-    /*
-    struct sockaddr_in serv_addr;
-    memset(&serv_addr, 0, sizeof(serv_addr));
-    serv_addr.sin_family = AF_INET;
-    serv_addr.sin_port = htons(PORT);
-    if (inet_pton(AF_INET, "localhost", &serv_addr.sin_addr) <= 0) {
-        perror("inet_pton");
-        result = -1;
-        goto done;
-    }
-    */
-    /*
-    result = connect(sockfd, (struct sockaddr *) &serv_addr, sizeof(serv_addr));
-    if (result == -1) {
-        perror("connect");
-        goto done;
-    }
-    */
 
     // TODO: send query and read response
     char buf[1024];
