@@ -14,7 +14,7 @@
 
 #define PORT "5000"
 #define BACKLOG 16
-#define NTHREADS 4
+#define NTHREADS 16
 
 // boolean to tell the server to keep looping
 static bool volatile keep_running = true;
@@ -107,17 +107,19 @@ main(void)
         }
 
         // TODO: add a job to the threadpool to handle acceptfd
+        struct job job;
+        threadpool_add_job(tpool, &job);
         sprintf(buf, "hello from server");
         write(acceptfd, buf, sizeof(buf));
         close(acceptfd);
     }
 
   shutdown:
-    printf("shutting down...\n");
     threadpool_destroy(tpool);
+    printf("done.\n");
     result = 0;
   cleanup_listenfd:
     assert(close(listenfd) == 0);
-  done:;
+  done:
     return result;
 }

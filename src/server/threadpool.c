@@ -3,6 +3,7 @@
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <unistd.h>
 #include "../common/include/synch.h"
 #include "include/threadpool.h"
 
@@ -47,8 +48,12 @@ thread_worker(void *arg)
             goto shutdown;
         }
         assert(tpool->tp_num_jobs != 0);
-        // pop job off queue and run it
+        tpool->tp_num_jobs--;
         lock_release(tpool->tp_lock);
+
+        // TODO: pop job off queue and run it
+        sleep(random() % 10);
+        printf("thread %d handling job\n", tnum);
     }
 
   shutdown:
