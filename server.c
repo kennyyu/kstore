@@ -14,6 +14,7 @@
 
 #define PORT "5000"
 #define BACKLOG 16
+#define NTHREADS 4
 
 // boolean to tell the server to keep looping
 static bool volatile keep_running = true;
@@ -30,14 +31,13 @@ sigint_handler(int sig)
 int
 main(void)
 {
-    struct threadpool *tpool = threadpool_create(5);
+    struct threadpool *tpool = threadpool_create(NTHREADS);
     assert(tpool != NULL);
     threadpool_destroy(tpool);
     printf("hello server\n");
 
     int result;
     int listenfd, acceptfd;
-    //struct sockaddr_in serv_addr;
     struct addrinfo hints, *servinfo;
     int yes = 1;
 
@@ -52,7 +52,7 @@ main(void)
         goto done;
     }
 
-    // create a file descriptor to listen for connections
+    // create a socket for listening for connections
     listenfd = socket(servinfo->ai_family, servinfo->ai_socktype,
                       servinfo->ai_protocol);
     if (listenfd == -1) {
@@ -60,36 +60,27 @@ main(void)
         result = listenfd;
         goto done;
     }
+
+    // make the socket reusable
     result = setsockopt(listenfd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int));
     if (result == -1) {
         perror("setsockopt");
-        goto done;
+        goto cleanup_listenfd;
     }
+
+    // bind the file descriptor to a port
     result = bind(listenfd, servinfo->ai_addr, servinfo->ai_addrlen);
     if (result == -1) {
         perror("bind");
-        goto done;
+        goto cleanup_listenfd;
     }
     freeaddrinfo(servinfo);
-
-    // bind the file descriptor to a port
-    /*
-    memset(&serv_addr, 0, sizeof(serv_addr));
-    serv_addr.sin_family = AF_INET;
-    serv_addr.sin_addr.s_addr = htonl(INADDR_ANY);
-    serv_addr.sin_port = htons(PORT);
-    result = bind(listenfd, (const struct sockaddr *) &serv_addr,
-                  sizeof(serv_addr));
-    if (result == -1) {
-        perror("bind");
-        goto done;
-    }*/
 
     // put the socket in listening mode
     result = listen(listenfd, BACKLOG);
     if (result == -1) {
         perror("listen");
-        goto done;
+        goto cleanup_listenfd;
     }
 
     // install a SIGINT handler for graceful shutdown
@@ -109,7 +100,7 @@ main(void)
         acceptfd = accept(listenfd, NULL, NULL);
         if (acceptfd == -1) {
             perror("accept");
-            goto done;
+            goto shutdown;
         }
 
         // TODO: add a job to the threadpool to handle acceptfd
@@ -118,7 +109,11 @@ main(void)
         close(acceptfd);
     }
 
-  done:
+  shutdown:
     printf("shutdown\n");
+    result = 0;
+  cleanup_listenfd:
+    assert(close(listenfd) == 0);
+  done:
     return result;
 }

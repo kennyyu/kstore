@@ -1,4 +1,5 @@
 #include <arpa/inet.h>
+#include <assert.h>
 #include <errno.h>
 #include <netdb.h>
 #include <stdio.h>
@@ -30,6 +31,7 @@ main(void)
         goto done;
     }
 
+    // create a socket to connect to the server
     sockfd = socket(servinfo->ai_family, servinfo->ai_socktype,
                     servinfo->ai_protocol);
     if (sockfd == -1) {
@@ -39,18 +41,22 @@ main(void)
     }
     freeaddrinfo(servinfo);
 
+    // wait for a connection to the server
     result = connect(sockfd, servinfo->ai_addr, servinfo->ai_addrlen);
     if (result == -1) {
         perror("connect");
-        goto done;
+        goto cleanup_sockfd;
     }
 
     // TODO: send query and read response
     char buf[1024];
     read(sockfd, buf, sizeof(buf));
     printf("%s\n", buf);
-    close(sockfd);
+    result = 0;
+    goto cleanup_sockfd;
 
+  cleanup_sockfd:
+    assert(close(sockfd) == 0);
   done:
     return result;
 }
