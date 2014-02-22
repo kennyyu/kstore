@@ -27,7 +27,7 @@ list_create(void)
     lst->lst_head.ln_prev = NULL;
     lst->lst_head.ln_next = &lst->lst_tail;
     lst->lst_tail.ln_next = NULL;
-    lst->lst_head.ln_prev = &lst->lst_head;
+    lst->lst_tail.ln_prev = &lst->lst_head;
     lst->lst_size = 0;
   done:
     return lst;
@@ -52,6 +52,8 @@ int
 list_addhead(struct list *lst, void *item)
 {
     assert(lst != NULL);
+    assert(lst->lst_head.ln_prev == NULL);
+    assert(lst->lst_tail.ln_next == NULL);
     int result;
     struct listnode *lnode = malloc(sizeof(struct listnode));
     if (lnode == NULL) {
@@ -59,9 +61,9 @@ list_addhead(struct list *lst, void *item)
         goto done;
     }
     lnode->ln_item = item;
+    lnode->ln_prev = &lst->lst_head;
     lnode->ln_next = lst->lst_head.ln_next;
     lnode->ln_next->ln_prev = lnode;
-    lnode->ln_prev = &lst->lst_head;
     lnode->ln_prev->ln_next = lnode;
     lst->lst_size++;
     result = 0;
@@ -73,6 +75,8 @@ int
 list_addtail(struct list *lst, void *item)
 {
     assert(lst != NULL);
+    assert(lst->lst_head.ln_prev == NULL);
+    assert(lst->lst_tail.ln_next == NULL);
     int result;
     struct listnode *lnode = malloc(sizeof(struct listnode));
     if (lnode == NULL) {
@@ -80,9 +84,9 @@ list_addtail(struct list *lst, void *item)
         goto done;
     }
     lnode->ln_item = item;
-    lnode->ln_next = lst->lst_head.ln_next;
+    lnode->ln_next = &lst->lst_tail;
+    lnode->ln_prev = lst->lst_tail.ln_prev;
     lnode->ln_next->ln_prev = lnode;
-    lnode->ln_prev = &lst->lst_head;
     lnode->ln_prev->ln_next = lnode;
     lst->lst_size++;
     result = 0;
@@ -116,6 +120,7 @@ list_remhead(struct list *lst)
     assert(lst != NULL);
     assert(lst->lst_size > 0);
     struct listnode *lnode = lst->lst_head.ln_next;
+    assert(lnode != &lst->lst_tail);
     void *item = lnode->ln_item;
     lnode->ln_next->ln_prev = lnode->ln_prev;
     lnode->ln_prev->ln_next = lnode->ln_next;
@@ -130,6 +135,7 @@ list_remtail(struct list *lst)
     assert(lst != NULL);
     assert(lst->lst_size > 0);
     struct listnode *lnode = lst->lst_tail.ln_prev;
+    assert(lnode != &lst->lst_head);
     void *item = lnode->ln_item;
     lnode->ln_next->ln_prev = lnode->ln_prev;
     lnode->ln_prev->ln_next = lnode->ln_next;
@@ -146,6 +152,8 @@ list_iterhead(struct list *lst)
     if (lst->lst_size == 0) {
         return NULL;
     }
+    assert(lst->lst_head.ln_prev == NULL);
+    assert(lst->lst_tail.ln_next == NULL);
     assert(lst->lst_head.ln_next != &lst->lst_tail);
     assert(lst->lst_tail.ln_prev != &lst->lst_head);
     return lst->lst_head.ln_next;
@@ -158,6 +166,8 @@ list_itertail(struct list *lst)
     if (lst->lst_size == 0) {
         return NULL;
     }
+    assert(lst->lst_head.ln_prev == NULL);
+    assert(lst->lst_tail.ln_next == NULL);
     assert(lst->lst_head.ln_next != &lst->lst_tail);
     assert(lst->lst_tail.ln_prev != &lst->lst_head);
     return lst->lst_tail.ln_prev;

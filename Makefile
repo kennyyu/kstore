@@ -21,6 +21,10 @@
 #   client/
 #   server/
 #   common/
+# test/
+#   *.c
+# testbin/
+#   *_test
 INCDIR = include
 OBJDIR = obj
 SRCDIR = src
@@ -28,6 +32,9 @@ SRCDIR = src
 SERVER = server
 CLIENT = client
 COMMON = common
+
+TEST_SRCDIR = test
+TEST_OBJDIR = testbin
 
 SERVER_INCDIR = $(SRCDIR)/$(SERVER)/$(INCDIR)
 CLIENT_INCDIR = $(SRCDIR)/$(CLIENT)/$(INCDIR)
@@ -53,9 +60,20 @@ COMMON_DEPS = $(wildcard $(COMMON_INCDIR)/*.h)
 COMMON_SRCS = $(wildcard $(COMMON_SRCDIR)/*.c)
 COMMON_OBJS = $(addprefix $(COMMON_OBJDIR)/,$(notdir $(COMMON_SRCS:.c=.o)))
 
+TEST_SRCS = $(wildcard $(TEST_SRCDIR)/*.c)
+TEST_OBJS = $(addprefix $(TEST_OBJDIR)/,$(notdir $(TEST_SRCS:.c=.o)))
+TEST_BINS = $(addprefix $(TEST_OBJDIR)/,$(notdir $(TEST_SRCS:.c=)))
+
 CC = gcc
-CFLAGS = -Wall -Werror -O1 -ggdb -std=gnu99 -m32
+CFLAGS = -Wall -Werror -ggdb -std=gnu99 -m32
 LIBS = -lm -lpthread
+
+$(TEST_OBJDIR)/%_test: $(TEST_OBJDIR)/%_test.o $(COMMON_OBJS) $(SERVER_OBJS) $(CLIENT_OBJS)
+	$(CC) -o $@ $^ $(CFLAGS) -I$(COMMON_INCDIR) -I$(SERVER_INCDIR) -I$(CLIENT_INCDIR) $(LIBS)
+
+$(TEST_OBJDIR)/%.o: $(TEST_SRCDIR)/%.c $(COMMON_DEPS) $(SERVER_DEPS) $(CLIENT_DEPS)
+	mkdir -p $(TEST_OBJDIR)
+	$(CC) -c -o $@ $< $(CFLAGS) -I$(COMMON_INCDIR) -I$(SERVER_INCDIR) -I$(CLIENT_INCDIR)
 
 $(COMMON_OBJDIR)/%.o: $(COMMON_SRCDIR)/%.c $(COMMON_DEPS)
 	mkdir -p $(COMMON_OBJDIR)
@@ -71,6 +89,16 @@ $(CLIENT_OBJDIR)/%.o: $(CLIENT_SRCDIR)/%.c $(CLIENT_DEPS) $(COMMON_OBJS) $(COMMO
 
 all: server client
 
+test: $(TEST_BINS)
+	@echo
+	@echo ">>> STARTING TESTS"
+	@for t in "$(shell ls $(TEST_OBJDIR)/*_test)"; do \
+		echo "=== running $$t... ==="; \
+		./$$t; \
+		echo "=== finished $$t ==="; \
+	done
+	@echo ">>> TESTS DONE"
+
 server: $(COMMON_OBJS) $(SERVER_OBJS) server.o
 	$(CC) -o $@ $^ $(CFLAGS) -I$(SERVER_INCDIR) -I$(COMMON_INCDIR) $(LIBS)
 
@@ -78,6 +106,6 @@ client: $(COMMON_OBJS) $(CLIENT_OBJS) client.o
 	$(CC) -o $@ $^ $(CFLAGS) -I$(CLIENT_INCDIR) -I$(COMMON_INCDIR) $(LIBS)
 
 clean:
-	rm -rf $(OBJDIR) *~ core client server *.o
+	rm -rf $(OBJDIR) *~ core client server *.o testbin
 
 .PHONY: clean
