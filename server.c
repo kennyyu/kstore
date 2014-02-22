@@ -99,7 +99,6 @@ main(void)
     }
 
     // accept in a loop, waiting for more connections
-    char buf[1024];
     while (keep_running) {
         acceptfd = accept(listenfd, NULL, NULL);
         if (acceptfd == -1) {
@@ -107,12 +106,16 @@ main(void)
             goto shutdown;
         }
 
-        // TODO: add a job to the threadpool to handle acceptfd
+        // add the file descriptor as a job to the thread pool
+        // if we can't add it, clean up the file descriptor.
+        // if we are successful, the threadpool will handle
+        // cleaning up the file descriptor
         struct job job;
-        threadpool_add_job(tpool, &job);
-        sprintf(buf, "hello from server");
-        write(acceptfd, buf, sizeof(buf));
-        close(acceptfd);
+        job.j_sockfd = acceptfd;
+        result = threadpool_add_job(tpool, &job);
+        if (result == -1) {
+            assert(close(acceptfd) == 0);
+        }
     }
 
   shutdown:

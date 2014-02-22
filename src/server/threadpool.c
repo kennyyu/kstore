@@ -27,6 +27,31 @@ struct thread_worker_args {
 };
 
 static
+void
+job_destroy(struct job *job) {
+    assert(job != NULL);
+    assert(close(job->j_sockfd) == 0);
+    free(job);
+}
+
+// This will handle each job. This is responsible for cleaning up
+// any errors and closing the file descriptor.
+static
+void
+job_handle(struct job *job) {
+    int fd = job->j_sockfd;
+
+    char buf[1024];
+    sprintf(buf, "hello from server");
+    write(fd, buf, sizeof(buf));
+
+    goto done;
+
+  done:
+    job_destroy(job);
+}
+
+static
 void *
 thread_worker(void *arg)
 {
@@ -53,13 +78,13 @@ thread_worker(void *arg)
         }
         assert(joblist_size(tpool->tp_jobs) != 0);
         struct job *job = joblist_remhead(tpool->tp_jobs);
-        (void) job;
         lock_release(tpool->tp_lock);
 
-        // TODO: pop job off queue and run it
+        // TODO: do something with the job
         printf("thread %d handling job...\n", tnum);
         sleep(random() % 10);
         printf("thread %d handling job done.\n", tnum);
+        job_handle(job);
     }
 
   shutdown:
@@ -150,7 +175,10 @@ threadpool_destroy(struct threadpool *tpool)
     }
 
     // The main thread must then cleanup any remaining jobs on the queue
-    // TODO
+    while (joblist_size(tpool->tp_jobs) > 0) {
+        struct job *job = joblist_remhead(tpool->tp_jobs);
+        job_destroy(job);
+    }
 
     semaphore_destroy(tpool->tp_shutdown_sem);
     cv_destroy(tpool->tp_cv_job_queue);
@@ -166,6 +194,7 @@ threadpool_add_job(struct threadpool *tpool, struct job *job)
     assert(tpool != NULL);
     assert(job != NULL);
 
+    // the threadpool maintains its own copy of the job
     int result;
     struct job *jobinternal = malloc(sizeof(struct job));
     if (job == NULL) {
