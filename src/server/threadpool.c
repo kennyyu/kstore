@@ -14,7 +14,7 @@ DEFLIST(job);
 struct threadpool {
     unsigned tp_nthreads;
     pthread_t *tp_threads;
-    volatile unsigned tp_num_jobs;
+    struct joblist *tp_jobs;
     struct lock *tp_lock;
     struct cv *tp_cv_job_queue;
     volatile bool tp_shutdown;
@@ -44,15 +44,16 @@ thread_worker(void *arg)
     //     jobs on the queue.
     while (1) {
         lock_acquire(tpool->tp_lock);
-        while (tpool->tp_num_jobs == 0 && !tpool->tp_shutdown) {
+        while (joblist_size(tpool->tp_jobs) == 0 && !tpool->tp_shutdown) {
             cv_wait(tpool->tp_cv_job_queue, tpool->tp_lock);
         }
         if (tpool->tp_shutdown) {
             lock_release(tpool->tp_lock);
             goto shutdown;
         }
-        assert(tpool->tp_num_jobs != 0);
-        tpool->tp_num_jobs--;
+        assert(joblist_size(tpool->tp_jobs) != 0);
+        struct job *job = joblist_remhead(tpool->tp_jobs);
+        (void) job;
         lock_release(tpool->tp_lock);
 
         // TODO: pop job off queue and run it
@@ -78,9 +79,13 @@ threadpool_create(unsigned nthreads)
     if (tpool->tp_threads == NULL) {
         goto cleanup_tpool;
     }
+    tpool->tp_jobs = joblist_create();
+    if (tpool->tp_jobs == NULL) {
+        goto cleanup_threads;
+    }
     tpool->tp_lock = lock_create();
     if (tpool->tp_lock == NULL) {
-        goto cleanup_threads;
+        goto cleanup_joblist;
     }
     tpool->tp_cv_job_queue = cv_create();
     if (tpool->tp_cv_job_queue == NULL) {
@@ -92,7 +97,6 @@ threadpool_create(unsigned nthreads)
     }
     tpool->tp_shutdown = false;
     tpool->tp_nthreads = nthreads;
-    tpool->tp_num_jobs = 0;
 
     // start and detach all the threads
     int result;
@@ -119,6 +123,8 @@ threadpool_create(unsigned nthreads)
     cv_destroy(tpool->tp_cv_job_queue);
   cleanup_lock:
     lock_destroy(tpool->tp_lock);
+  cleanup_joblist:
+    joblist_destroy(tpool->tp_jobs);
   cleanup_threads:
     free(tpool->tp_threads);
   cleanup_tpool:
@@ -149,6 +155,7 @@ threadpool_destroy(struct threadpool *tpool)
     semaphore_destroy(tpool->tp_shutdown_sem);
     cv_destroy(tpool->tp_cv_job_queue);
     lock_destroy(tpool->tp_lock);
+    joblist_destroy(tpool->tp_jobs);
     free(tpool->tp_threads);
     free(tpool);
 }
@@ -159,12 +166,27 @@ threadpool_add_job(struct threadpool *tpool, struct job *job)
     assert(tpool != NULL);
     assert(job != NULL);
 
+    int result;
+    struct job *jobinternal = malloc(sizeof(struct job));
+    if (job == NULL) {
+        goto done;
+    }
+    *jobinternal = *job;
+
     // Add a job to the queue and signal a thread to wake up to handle it
-    // TODO: actually add the job to the queue
     lock_acquire(tpool->tp_lock);
-    tpool->tp_num_jobs++;
+    result = joblist_addtail(tpool->tp_jobs, jobinternal);
+    if (result) {
+        lock_release(tpool->tp_lock);
+        goto cleanup_job;
+    }
     cv_signal(tpool->tp_cv_job_queue);
     lock_release(tpool->tp_lock);
+    result = 0;
+    goto done;
 
-    return 0;
+  cleanup_job:
+    free(jobinternal);
+  done:
+    return result;
 }
