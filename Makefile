@@ -106,6 +106,6 @@ client: $(COMMON_OBJS) $(CLIENT_OBJS) client.o
 	$(CC) -o $@ $^ $(CFLAGS) -I$(CLIENT_INCDIR) -I$(COMMON_INCDIR) $(LIBS)
 
 clean:
-	rm -rf $(OBJDIR) *~ core client server *.o testbin
+	rm -rf $(OBJDIR) *~ core client server *.o $(TEST_OBJDIR)
 
 .PHONY: clean
