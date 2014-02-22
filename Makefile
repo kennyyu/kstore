@@ -92,7 +92,7 @@ all: server client
 test: $(TEST_BINS)
 	@echo
 	@echo ">>> STARTING TESTS"
-	@for t in "$(shell ls $(TEST_OBJDIR)/*_test)"; do \
+	@for t in `ls $(TEST_OBJDIR)/*_test`; do \
 		echo "=== running $$t... ==="; \
 		./$$t; \
 		echo "=== finished $$t ==="; \
