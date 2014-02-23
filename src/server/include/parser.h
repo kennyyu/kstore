@@ -7,5 +7,6 @@
 DECLARRAY(op);
 
 struct oparray *parse_query(char *query);
+void parse_cleanup(struct oparray *ops);
 
 #endif

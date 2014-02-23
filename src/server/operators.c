@@ -21,6 +21,7 @@ char *op_type_string(enum op_type op_type) {
     }
 }
 char *op_string(struct op *op) {
+    char *stype;
     char *buf = malloc(sizeof(char) * 2048);
     if (buf == NULL) {
         goto done;
@@ -66,8 +67,8 @@ char *op_string(struct op *op) {
                 op->op_fetch.op_fetch_col,
                 op->op_fetch.op_fetch_pos);
         break;
-    case OP_CREATE: return "OP_CREATE";
-        char *stype = storage_type_string(op->op_create.op_create_stype);
+    case OP_CREATE:
+        stype = storage_type_string(op->op_create.op_create_stype);
         sprintf(buf, "create(%s,%s)",
                 op->op_create.op_create_col,
                 stype);
@@ -76,7 +77,7 @@ char *op_string(struct op *op) {
         sprintf(buf, "load(%s)",
                 op->op_load.op_load_file);
         break;
-    case OP_INSERT: return "OP_INSERT";
+    case OP_INSERT:
         sprintf(buf, "insert(%s,%u)",
                 op->op_insert.op_insert_col,
                 op->op_insert.op_insert_val);

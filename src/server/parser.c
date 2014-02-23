@@ -90,13 +90,8 @@ parse_line(const char *line)
     }
     char stype_buf[16];
 
-    bzero(op, sizeof(struct op));
-    if (sscanf(line, "%[^=]=select(%[)])",
-        (char *) &op->op_select.op_sel_var,
-        (char *) &op->op_select.op_sel_col) == 2) {
-        op->op_type = OP_SELECT_ALL_ASSIGN;
-        goto done;
-    }
+    // Because scanf is greedy, we need to put the select
+    // in decreasing number of arguments.
     bzero(op, sizeof(struct op));
     if (sscanf(line, "%[^=]=select(%[^,],%u,%u)",
         (char *) &op->op_select.op_sel_var,
@@ -115,9 +110,10 @@ parse_line(const char *line)
         goto done;
     }
     bzero(op, sizeof(struct op));
-    if (sscanf(line, "select(%[)])",
-        (char *) &op->op_select.op_sel_col) == 1) {
-        op->op_type = OP_SELECT_ALL;
+    if (sscanf(line, "%[^=]=select(%[^,)])",
+        (char *) &op->op_select.op_sel_var,
+        (char *) &op->op_select.op_sel_col) == 2) {
+        op->op_type = OP_SELECT_ALL_ASSIGN;
         goto done;
     }
     bzero(op, sizeof(struct op));
@@ -135,15 +131,20 @@ parse_line(const char *line)
         op->op_type = OP_SELECT_VALUE;
         goto done;
     }
+    if (sscanf(line, "select(%[^,)])",
+        (char *) &op->op_select.op_sel_col) == 1) {
+        op->op_type = OP_SELECT_ALL;
+        goto done;
+    }
     bzero(op, sizeof(struct op));
-    if (sscanf(line, "fetch(%[^,],%[)])",
+    if (sscanf(line, "fetch(%[^,],%[^)])",
         (char *) &op->op_fetch.op_fetch_col,
         (char *) &op->op_fetch.op_fetch_pos) == 2) {
         op->op_type = OP_FETCH;
         goto done;
     }
     bzero(op, sizeof(struct op));
-    if (sscanf(line, "create(%[^,],%[)])",
+    if (sscanf(line, "create(%[^,],%[^)])",
         (char *) &op->op_create.op_create_col,
         (char *) stype_buf) == 2) {
         op->op_type = OP_CREATE;
@@ -151,7 +152,7 @@ parse_line(const char *line)
         goto done;
     }
     bzero(op, sizeof(struct op));
-    if (sscanf(line, "load(%[)])",
+    if (sscanf(line, "load(%[^)])",
         (char *) &op->op_load.op_load_file) == 1) {
         op->op_type = OP_LOAD;
         goto done;
@@ -172,6 +173,18 @@ parse_line(const char *line)
     return op;
 }
 
+void
+parse_cleanup(struct oparray *ops)
+{
+    assert(ops != NULL);
+    while (oparray_num(ops) != 0) {
+        struct op *op = oparray_get(ops, 0);
+        oparray_remove(ops, 0);
+        free(op);
+    }
+    oparray_destroy(ops);
+}
+
 struct oparray *
 parse_query(char *query)
 {
@@ -182,10 +195,6 @@ parse_query(char *query)
     if (lines == NULL) {
         goto done;
     }
-    for (unsigned i = 0; i < stringarray_num(lines); i++) {
-        printf("line %u:[%s]\n", i, stringarray_get(lines, i));
-    }
-
     ops = oparray_create();
     if (ops == NULL) {
         goto cleanup_lines;
@@ -200,23 +209,16 @@ parse_query(char *query)
             goto cleanup_oparray;
         }
     }
-    for (unsigned i = 0; i < oparray_num(ops); i++) {
-        char *query = op_string(oparray_get(ops, i));
-        printf("%s\n", query);
-        printf("%s\n", op_type_string(oparray_get(ops, i)->op_type));
-        free(query);
-    }
     goto cleanup_lines;
 
   cleanup_oparray:
-    while (oparray_num(ops) != 0) {
-        oparray_remove(ops, 0);
-    }
-    oparray_destroy(ops);
+    parse_cleanup(ops);
     ops = NULL;
   cleanup_lines:
     while (stringarray_num(lines) != 0) {
+        char *line = stringarray_get(lines, 0);
         stringarray_remove(lines, 0);
+        free(line);
     }
     stringarray_destroy(lines);
   done:

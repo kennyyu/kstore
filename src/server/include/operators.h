@@ -70,6 +70,8 @@ struct op {
 enum storage_type storage_type_from_string(char *s);
 char *storage_type_string(enum storage_type stype);
 char *op_type_string(enum op_type op_type);
+
+// This string must be destroyed by the caller
 char *op_string(struct op *op);
 
 #endif
