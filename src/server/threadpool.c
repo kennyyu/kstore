@@ -27,10 +27,22 @@ struct thread_worker_args {
 };
 
 static
+struct job *
+job_copy(struct job *joborig)
+{
+    struct job *jobcopy = malloc(sizeof(struct job));
+    if (jobcopy == NULL) {
+        goto done;
+    }
+    *jobcopy = *joborig;
+  done:
+    return jobcopy;
+}
+
+static
 void
 job_destroy(struct job *job) {
     assert(job != NULL);
-    assert(close(job->j_sockfd) == 0);
     free(job);
 }
 
@@ -39,15 +51,10 @@ job_destroy(struct job *job) {
 static
 void
 job_handle(struct job *job) {
-    int fd = job->j_sockfd;
-
-    char buf[1024];
-    sprintf(buf, "hello from server");
-    write(fd, buf, sizeof(buf));
-
-    goto done;
-
-  done:
+    assert(job != NULL);
+    void *arg = job->j_arg;
+    void (*routine)(void *) = job->j_routine;
+    routine(arg);
     job_destroy(job);
 }
 
@@ -196,11 +203,10 @@ threadpool_add_job(struct threadpool *tpool, struct job *job)
 
     // the threadpool maintains its own copy of the job
     int result;
-    struct job *jobinternal = malloc(sizeof(struct job));
+    struct job *jobinternal = job_copy(job);
     if (job == NULL) {
         goto done;
     }
-    *jobinternal = *job;
 
     // Add a job to the queue and signal a thread to wake up to handle it
     lock_acquire(tpool->tp_lock);
@@ -215,7 +221,7 @@ threadpool_add_job(struct threadpool *tpool, struct job *job)
     goto done;
 
   cleanup_job:
-    free(jobinternal);
+    job_destroy(jobinternal);
   done:
     return result;
 }

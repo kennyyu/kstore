@@ -28,6 +28,21 @@ sigint_handler(int sig)
     printf("Caught shutdown signal, shutting down...\n");
 }
 
+struct server_job_args {
+    int fd;
+};
+
+static
+void
+server_routine(void *arg)
+{
+    struct server_job_args *sarg = (struct server_job_args *) arg;
+    char buf[1024];
+    sprintf(buf, "hello from server");
+    write(sarg->fd, buf, sizeof(buf));
+    assert(close(sarg->fd) == 0);
+}
+
 int
 main(void)
 {
@@ -110,8 +125,11 @@ main(void)
         // if we can't add it, clean up the file descriptor.
         // if we are successful, the threadpool will handle
         // cleaning up the file descriptor
+        struct server_job_args sjob;
+        sjob.fd = acceptfd;
         struct job job;
-        job.j_sockfd = acceptfd;
+        job.j_arg = (void *) &sjob;
+        job.j_routine = server_routine;
         result = threadpool_add_job(tpool, &job);
         if (result == -1) {
             assert(close(acceptfd) == 0);

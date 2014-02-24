@@ -4,7 +4,8 @@
 struct threadpool;
 
 struct job {
-    int j_sockfd; // file descriptor for client connection
+    void *j_arg;
+    void (*j_routine)(void *arg);
 };
 
 struct threadpool *threadpool_create(unsigned nthreads);
