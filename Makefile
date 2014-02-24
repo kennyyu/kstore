@@ -72,24 +72,24 @@ $(TEST_OBJDIR)/%_test: $(TEST_OBJDIR)/%_test.o $(COMMON_OBJS) $(SERVER_OBJS) $(C
 	$(CC) -o $@ $^ $(CFLAGS) -I$(COMMON_INCDIR) -I$(SERVER_INCDIR) -I$(CLIENT_INCDIR) $(LIBS)
 
 $(TEST_OBJDIR)/%.o: $(TEST_SRCDIR)/%.c $(COMMON_DEPS) $(SERVER_DEPS) $(CLIENT_DEPS)
-	mkdir -p $(TEST_OBJDIR)
+	@mkdir -p $(TEST_OBJDIR)
 	$(CC) -c -o $@ $< $(CFLAGS) -I$(COMMON_INCDIR) -I$(SERVER_INCDIR) -I$(CLIENT_INCDIR)
 
 $(COMMON_OBJDIR)/%.o: $(COMMON_SRCDIR)/%.c $(COMMON_DEPS)
-	mkdir -p $(COMMON_OBJDIR)
+	@mkdir -p $(COMMON_OBJDIR)
 	$(CC) -c -o $@ $< $(CFLAGS) -I$(COMMON_INCDIR)
 
 $(SERVER_OBJDIR)/%.o: $(SERVER_SRCDIR)/%.c $(SERVER_DEPS) $(COMMON_OBJS) $(COMMON_DEPS)
-	mkdir -p $(SERVER_OBJDIR)
+	@mkdir -p $(SERVER_OBJDIR)
 	$(CC) -c -o $@ $< $(CFLAGS) -I$(SERVER_INCDIR) -I$(COMMON_INCDIR)
 
 $(CLIENT_OBJDIR)/%.o: $(CLIENT_SRCDIR)/%.c $(CLIENT_DEPS) $(COMMON_OBJS) $(COMMON_DEPS)
-	mkdir -p $(CLIENT_OBJDIR)
+	@mkdir -p $(CLIENT_OBJDIR)
 	$(CC) -c -o $@ $< $(CFLAGS) -I$(CLIENT_INCDIR) -I$(COMMON_INCDIR)
 
 all: server client
 
-test: $(TEST_BINS)
+test: server client $(TEST_BINS)
 	@echo
 	@echo ">>> STARTING TESTS"
 	@for t in `ls $(TEST_OBJDIR)/*_test`; do \
