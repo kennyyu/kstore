@@ -73,7 +73,9 @@ parse_split_lines(char *query)
 
   cleanup_vec:
     while (stringarray_num(vec) != 0) {
+        char *line = stringarray_get(vec, 0);
         stringarray_remove(vec, 0);
+        free(line);
     }
     stringarray_destroy(vec);
   done:
