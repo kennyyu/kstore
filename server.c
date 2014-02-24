@@ -41,6 +41,7 @@ server_routine(void *arg)
     sprintf(buf, "hello from server");
     write(sarg->fd, buf, sizeof(buf));
     assert(close(sarg->fd) == 0);
+    free(sarg);
 }
 
 int
@@ -125,15 +126,25 @@ main(void)
         // if we can't add it, clean up the file descriptor.
         // if we are successful, the threadpool will handle
         // cleaning up the file descriptor
-        struct server_job_args sjob;
-        sjob.fd = acceptfd;
+        struct server_job_args *sjob = malloc(sizeof(struct server_job_args));
+        if (sjob == NULL) {
+            goto cleanup_acceptfd;
+        }
+        sjob->fd = acceptfd;
+
         struct job job;
-        job.j_arg = (void *) &sjob;
+        job.j_arg = (void *) sjob;
         job.j_routine = server_routine;
         result = threadpool_add_job(tpool, &job);
         if (result == -1) {
-            assert(close(acceptfd) == 0);
+            goto cleanup_sjob;
         }
+        continue;
+
+      cleanup_sjob:
+        free(sjob);
+      cleanup_acceptfd:
+        assert(close(acceptfd));
     }
 
   shutdown:
