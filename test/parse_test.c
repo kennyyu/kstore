@@ -221,15 +221,6 @@ void testmultiple(void) {
 }
 
 int main(void) {
-    /*
-    char buf[1024];
-    int result = read(STDIN_FILENO, buf, sizeof(buf));
-    if (result != -1) {
-        buf[result] = '\0'; // null terminate the string
-    }
-    struct oparray *ops = parse_query(buf);
-    (void) ops;
-    */
     testbad();
     testselectall();
     testselectrange();
