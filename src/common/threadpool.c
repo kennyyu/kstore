@@ -4,8 +4,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
-#include "../common/include/synch.h"
-#include "../common/include/list.h"
+#include "include/synch.h"
+#include "include/list.h"
 #include "include/threadpool.h"
 
 DECLLIST(job);
