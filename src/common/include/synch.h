@@ -1,5 +1,5 @@
-#ifndef _COMMON_SYNCH_H
-#define _COMMON_SYNCH_H
+#ifndef _SYNCH_H
+#define _SYNCH_H
 
 #include <stdbool.h>
 

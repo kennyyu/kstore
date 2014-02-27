@@ -27,8 +27,8 @@
  * SUCH DAMAGE.
  */
 
-#ifndef _COMMON_BITMAP_H_
-#define _COMMON_BITMAP_H_
+#ifndef _BITMAP_H_
+#define _BITMAP_H_
 
 /*
  * Fixed-size array of bits. (Intended for storage management.)

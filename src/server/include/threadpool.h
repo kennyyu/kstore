@@ -1,5 +1,5 @@
-#ifndef _SERVER_THREADPOOL_H_
-#define _SERVER_THREADPOOL_H_
+#ifndef _THREADPOOL_H_
+#define _THREADPOOL_H_
 
 struct threadpool;
 

@@ -1,5 +1,5 @@
-#ifndef _SERVER_OPERATORS_H_
-#define _SERVER_OPERATORS_H_
+#ifndef _OPERATORS_H_
+#define _OPERATORS_H_
 
 #define COLUMNLEN 256
 
@@ -73,5 +73,9 @@ char *op_type_string(enum op_type op_type);
 
 // This string must be destroyed by the caller
 char *op_string(struct op *op);
+
+// TODO
+// support var=operator(...) in general
+// mmap files
 
 #endif

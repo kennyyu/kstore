@@ -27,8 +27,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef _COMMON_ARRAY_H_
-#define _COMMON_ARRAY_H_
+#ifndef _ARRAY_H_
+#define _ARRAY_H_
 
 #include <assert.h>
 #include <stddef.h>

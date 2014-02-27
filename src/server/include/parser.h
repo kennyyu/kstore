@@ -1,5 +1,5 @@
-#ifndef _SERVER_PARSE_H_
-#define _SERVER_PARSE_H_
+#ifndef _PARSE_H_
+#define _PARSE_H_
 
 #include "operators.h"
 #include "../../common/include/array.h"

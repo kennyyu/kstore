@@ -1,5 +1,5 @@
-#ifndef _COMMON_LIST_H
-#define _COMMON_LIST_H
+#ifndef _LIST_H
+#define _LIST_H
 
 struct listnode;
 struct list;
