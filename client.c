@@ -16,39 +16,12 @@
 #include "src/common/include/db_message.h"
 #include "src/common/include/operators.h"
 #include "src/common/include/parser.h"
+#include "src/common/include/io.h"
 
 #define PORT "5000"
 #define HOST "localhost"
 
 #define BUFSIZE 4096
-
-static
-int copy_file(int readfd, int writefd, uint64_t total_expected)
-{
-    uint64_t total;
-    int nr, nw;
-    char buf[BUFSIZE];
-    while ((nr = read(readfd, buf, BUFSIZE)) > 0) {
-        nw = write(writefd, buf, nr);
-        assert(nw == nr);
-        total += nr;
-    }
-    if (nr == 0) {
-        assert(total == total_expected);
-        return 0;
-    } else {
-        return nr;
-    }
-}
-
-static
-uint64_t file_size(int fd)
-{
-    struct stat buf;
-    int result =fstat(fd, &buf);
-    assert(result == 0);
-    return buf.st_size;
-}
 
 // return -1 on EOF or error, 0 on success
 static
@@ -89,12 +62,12 @@ parse_stdin(int readfd, int writefd)
             }
             msg.dbm_type = DB_MESSAGE_FILE;
             msg.dbm_magic = DB_MESSAGE_MAGIC;
-            msg.dbm_len = file_size(loadfd);
+            msg.dbm_len = io_size(loadfd);
             result = dbm_write(writefd, &msg);
             if (result) {
                 goto cleanup_loadfd;
             }
-            result = copy_file(loadfd, writefd, msg.dbm_len);
+            result = io_copy(loadfd, writefd, msg.dbm_len);
             if (result) {
                 goto cleanup_loadfd;
             }
@@ -116,13 +89,12 @@ parse_stdin(int readfd, int writefd)
     return result;
 }
 
-
-
 // return 0 on EOF
 static
 int
 parse_sockfd(int readfd, int writefd)
 {
+    (void) writefd;
     int result;
     struct db_message msg;
     char *payload;
@@ -133,29 +105,42 @@ parse_sockfd(int readfd, int writefd)
     }
     switch (msg.dbm_type) {
     case DB_MESSAGE_FETCH_RESULT:
-        // TODO use robust io
+        // print all the fetched ints, one per line
         assert(msg.dbm_len % 4 == 0);
         payload = malloc(sizeof(char) * msg.dbm_len);
-        result = read(readfd, payload, msg.dbm_len);
-        assert(result == msg.dbm_len);
+        if (payload == NULL) {
+            result = ENOMEM;
+            goto done;
+        }
+        result = io_read(readfd, payload, msg.dbm_len);
+        if (result) {
+            goto cleanup_payload;
+        }
         fetch = (int *) payload;
         for (unsigned i = 0; i < msg.dbm_len / 4; i++) {
             printf("%d\n", fetch[i]);
         }
         break;
     case DB_MESSAGE_ERROR:
-        // TODO use robust io
+        // print the error message, dbm_len includes space for null character
         payload = malloc(sizeof(char) * msg.dbm_len);
+        if (payload == NULL) {
+            result = ENOMEM;
+            goto done;
+        }
         result = read(readfd, payload, msg.dbm_len);
-        assert(result == msg.dbm_len);
-        result = write(writefd, payload, msg.dbm_len);
-        assert(result == msg.dbm_len);
+        if (result) {
+            goto cleanup_payload;
+        }
+        printf("%s\n", payload);
         break;
     default:
         assert(0);
         break;
     }
 
+  cleanup_payload:
+    free(payload);
   done:
     return result;
 }
