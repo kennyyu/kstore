@@ -82,9 +82,8 @@ parse_split_lines(char *query)
     return vec;
 }
 
-static
 struct op *
-parse_line(const char *line)
+parse_line(char *line)
 {
     struct op *op = malloc(sizeof(struct op));
     if (op == NULL) {
@@ -176,7 +175,14 @@ parse_line(const char *line)
 }
 
 void
-parse_cleanup(struct oparray *ops)
+parse_cleanup(struct op *op)
+{
+    assert(op != NULL);
+    free(op);
+}
+
+void
+parse_cleanup_ops(struct oparray *ops)
 {
     assert(ops != NULL);
     while (oparray_num(ops) != 0) {
@@ -214,7 +220,7 @@ parse_query(char *query)
     goto cleanup_lines;
 
   cleanup_oparray:
-    parse_cleanup(ops);
+    parse_cleanup_ops(ops);
     ops = NULL;
   cleanup_lines:
     while (stringarray_num(lines) != 0) {

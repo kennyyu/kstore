@@ -16,7 +16,7 @@ void testselectall(void) {
     char *s = op_string(op);
     assert(strcmp(query, s) == 0);
     free(s);
-    parse_cleanup(ops);
+    parse_cleanup_ops(ops);
 }
 
 void testselectrange(void) {
@@ -31,7 +31,7 @@ void testselectrange(void) {
     char *s = op_string(op);
     assert(strcmp(query, s) == 0);
     free(s);
-    parse_cleanup(ops);
+    parse_cleanup_ops(ops);
 }
 
 void testselectvalue(void) {
@@ -45,7 +45,7 @@ void testselectvalue(void) {
     char *s = op_string(op);
     assert(strcmp(query, s) == 0);
     free(s);
-    parse_cleanup(ops);
+    parse_cleanup_ops(ops);
 }
 
 void testselectallassign(void) {
@@ -60,7 +60,7 @@ void testselectallassign(void) {
     char *s = op_string(op);
     assert(strcmp(query, s) == 0);
     free(s);
-    parse_cleanup(ops);
+    parse_cleanup_ops(ops);
 }
 
 void testselectrangeassign(void) {
@@ -76,7 +76,7 @@ void testselectrangeassign(void) {
     char *s = op_string(op);
     assert(strcmp(query, s) == 0);
     free(s);
-    parse_cleanup(ops);
+    parse_cleanup_ops(ops);
 }
 
 void testselectvalueassign(void) {
@@ -91,7 +91,7 @@ void testselectvalueassign(void) {
     char *s = op_string(op);
     assert(strcmp(query, s) == 0);
     free(s);
-    parse_cleanup(ops);
+    parse_cleanup_ops(ops);
 }
 
 void testfetch(void) {
@@ -105,7 +105,7 @@ void testfetch(void) {
     char *s = op_string(op);
     assert(strcmp(query, s) == 0);
     free(s);
-    parse_cleanup(ops);
+    parse_cleanup_ops(ops);
 }
 
 void testcreatesorted(void) {
@@ -119,7 +119,7 @@ void testcreatesorted(void) {
     char *s = op_string(op);
     assert(strcmp(query, s) == 0);
     free(s);
-    parse_cleanup(ops);
+    parse_cleanup_ops(ops);
 }
 
 void testcreateunsorted(void) {
@@ -133,7 +133,7 @@ void testcreateunsorted(void) {
     char *s = op_string(op);
     assert(strcmp(query, s) == 0);
     free(s);
-    parse_cleanup(ops);
+    parse_cleanup_ops(ops);
 }
 
 void testcreatebtree(void) {
@@ -147,7 +147,7 @@ void testcreatebtree(void) {
     char *s = op_string(op);
     assert(strcmp(query, s) == 0);
     free(s);
-    parse_cleanup(ops);
+    parse_cleanup_ops(ops);
 }
 
 void testload(void) {
@@ -160,7 +160,7 @@ void testload(void) {
     char *s = op_string(op);
     assert(strcmp(query, s) == 0);
     free(s);
-    parse_cleanup(ops);
+    parse_cleanup_ops(ops);
 }
 
 void testinsert(void) {
@@ -174,14 +174,14 @@ void testinsert(void) {
     char *s = op_string(op);
     assert(strcmp(query, s) == 0);
     free(s);
-    parse_cleanup(ops);
+    parse_cleanup_ops(ops);
 }
 
 void testbad(void) {
     char *query = "";
     struct oparray *ops = parse_query(query);
     assert(oparray_num(ops) == 0);
-    parse_cleanup(ops);
+    parse_cleanup_ops(ops);
 }
 
 void testmultiple(void) {
@@ -217,7 +217,7 @@ void testmultiple(void) {
     assert(strcmp("insert(D,5)", s) == 0);
     free(s);
 
-    parse_cleanup(ops);
+    parse_cleanup_ops(ops);
 }
 
 int main(void) {
