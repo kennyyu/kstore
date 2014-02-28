@@ -23,21 +23,18 @@
 
 #define BUFSIZE 4096
 
-// return -1 on EOF or error, 0 on success
 static
 int
 parse_stdin(int readfd, int writefd)
 {
-    printf("parse_stdin\n");
     int result;
     char buf[BUFSIZE];
-    //struct db_message msg;
+    bzero(buf, BUFSIZE);
     result = read(readfd, buf, BUFSIZE); // read at most BUFSIZE
     if (result == -1 || result == 0) {
         result = -1;
         goto done;
     }
-    printf("post_read\n");
     struct oparray *ops = parse_query(buf);
     if (ops == NULL) {
         result = -1;
@@ -55,55 +52,8 @@ parse_stdin(int readfd, int writefd)
                 goto cleanup_ops;
             }
         }
-        /*
-        char *query = op_string(op);
-        printf("op [%s]\n", query);
-        msg.dbm_type = DB_MESSAGE_QUERY;
-        msg.dbm_magic = DB_MESSAGE_MAGIC;
-        msg.dbm_len = strlen(query) + 1; // +1 for the null byte
-        result = dbm_write(writefd, &msg);
-        if (result) {
-            goto cleanup_query;
-        }
-        result = io_write(writefd, query, msg.dbm_len);
-        if (result) {
-            goto cleanup_query;
-        }
-
-        // if we have a load type, open the file and send it to the server
-        if (op->op_type == OP_LOAD) {
-            char *fname = op->op_load.op_load_file;
-            int loadfd = open(fname, O_RDONLY);
-            if (loadfd == -1) {
-                printf("file name: [%s]\n", fname);
-                result = -1;
-                goto cleanup_query;
-            }
-            msg.dbm_type = DB_MESSAGE_FILE;
-            msg.dbm_magic = DB_MESSAGE_MAGIC;
-            msg.dbm_len = io_size(loadfd);
-            result = dbm_write(writefd, &msg);
-            if (result) {
-                goto cleanup_loadfd;
-            }
-            result = io_copy(loadfd, writefd, msg.dbm_len);
-            if (result) {
-                goto cleanup_loadfd;
-            }
-            assert(close(loadfd) == 0);
-            continue;
-          cleanup_loadfd:
-            assert(close(loadfd) == 0);
-            goto cleanup_query;
-        }
-        continue;
-
-      cleanup_query:
-        free(query);
-        goto cleanup_ops;
-      */
     }
-
+    // success
     result = 0;
   cleanup_ops:
     parse_cleanup_ops(ops);
@@ -111,7 +61,6 @@ parse_stdin(int readfd, int writefd)
     return result;
 }
 
-// return 0 on EOF
 static
 int
 parse_sockfd(int readfd, int writefd)
@@ -206,13 +155,11 @@ main(void)
         FD_ZERO(&readfds);
         FD_SET(STDIN_FILENO, &readfds);
         FD_SET(sockfd, &readfds);
-        printf("pre-select\n");
         result = select(sockfd + 1, &readfds, NULL, NULL, NULL);
         if (result == -1) {
             perror("select");
             goto cleanup_sockfd;
         }
-        printf("post-select\n");
 
         // if we get something from stdin, parse it and write it to the socket
         if (FD_ISSET(STDIN_FILENO, &readfds)) {
@@ -230,11 +177,6 @@ main(void)
             }
         }
     }
-    //char buf[1024];
-    //read(sockfd, buf, sizeof(buf));
-    //printf("%s\n", buf);
-    //result = 0;
-    //goto cleanup_sockfd;
 
   cleanup_sockfd:
     assert(close(sockfd) == 0);

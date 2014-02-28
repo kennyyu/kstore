@@ -1,6 +1,7 @@
 #include <assert.h>
 #include <unistd.h>
 #include <stdint.h>
+#include <string.h>
 #include <sys/stat.h>
 #include "include/io.h"
 
@@ -57,6 +58,7 @@ io_copy(int readfd, int writefd, uint64_t expected_bytes)
     uint64_t total = 0;
     int nr, nw;
     char buf[BUFSIZE];
+    bzero(buf, BUFSIZE);
     while ((nr = read(readfd, buf, MIN(BUFSIZE, expected_bytes - total))) > 0) {
         nw = write(writefd, buf, nr);
         assert(nw == nr);
