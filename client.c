@@ -31,7 +31,7 @@ parse_stdin(int readfd, int writefd)
     printf("parse_stdin\n");
     int result;
     char buf[BUFSIZE];
-    struct db_message msg;
+    //struct db_message msg;
     result = read(readfd, buf, BUFSIZE); // read at most BUFSIZE
     if (result == -1 || result == 0) {
         result = -1;
@@ -45,6 +45,17 @@ parse_stdin(int readfd, int writefd)
     }
     for (unsigned i = 0; i < oparray_num(ops); i++) {
         struct op *op = oparray_get(ops, i);
+        result = dbm_write_query(writefd, op);
+        if (result) {
+            goto cleanup_ops;
+        }
+        if (op->op_type == OP_LOAD) {
+            result = dbm_write_file(writefd, op);
+            if (result) {
+                goto cleanup_ops;
+            }
+        }
+        /*
         char *query = op_string(op);
         printf("op [%s]\n", query);
         msg.dbm_type = DB_MESSAGE_QUERY;
@@ -90,6 +101,7 @@ parse_stdin(int readfd, int writefd)
       cleanup_query:
         free(query);
         goto cleanup_ops;
+      */
     }
 
     result = 0;
@@ -189,7 +201,6 @@ main(void)
         goto cleanup_sockfd;
     }
 
-    // TODO: send query and read response
     while (1) {
         fd_set readfds;
         FD_ZERO(&readfds);

@@ -2,6 +2,7 @@
 #define _DB_MESSAGE_H_
 
 #include <stdint.h>
+#include "operators.h"
 
 #define DB_MESSAGE_MAGIC 0xDEADBEEF
 
@@ -20,5 +21,7 @@ struct db_message {
 
 int dbm_write(int fd, struct db_message *message);
 int dbm_read(int fd, struct db_message *message);
+int dbm_write_query(int fd, struct op *op);
+int dbm_write_file(int fd, struct op *op);
 
 #endif
