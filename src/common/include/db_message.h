@@ -28,7 +28,7 @@ int dbm_read_query(int fd, struct op **retop);
 
 int dbm_write_file(int fd, struct op *op);
 // the retfd must be closed
-int dbm_read_file(int fd, int *retfd);
+int dbm_read_file(int fd, char *tmpname, int *retfd);
 
 //int dbm_write_result(int fd, struct)
 // the retvals must be freed

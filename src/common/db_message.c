@@ -10,6 +10,7 @@
 #include "include/db_message.h"
 #include "include/io.h"
 #include "include/operators.h"
+#include "include/parser.h"
 
 // 64 bit conversion taken from:
 // http://stackoverflow.com/questions/809902/64-bit-ntohl-in-c
@@ -108,6 +109,77 @@ dbm_write_query(int fd, struct op *op)
 
   cleanup_query:
     free(query);
+    return result;
+}
+
+int
+dbm_read_query(int fd, struct op **retop)
+{
+    assert(retop != NULL);
+
+    int result;
+    struct db_message msg;
+    result = dbm_read(fd, &msg);
+    if (result) {
+        goto done;
+    }
+    assert(msg.dbm_type == DB_MESSAGE_QUERY);
+    char *payload = malloc(sizeof(char) * msg.dbm_len); // includes null byte
+    if (payload == NULL) {
+        goto done;
+    }
+    result = io_read(fd, payload, msg.dbm_len);
+    if (result) {
+        goto cleanup_payload;
+    }
+    struct op *op = parse_line(payload);
+    if (op == NULL) {
+        result = -1;
+        goto cleanup_payload;
+    }
+
+    // success
+    *retop = op;
+    result = 0;
+  cleanup_payload:
+    free(payload);
+  done:
+    return result;
+}
+
+int
+dbm_read_file(int fd, char *tmpname, int *retfd)
+{
+    assert(retfd != NULL);
+
+    int result;
+    struct db_message msg;
+    result = dbm_read(fd, &msg);
+    if (result) {
+        goto done;
+    }
+    int copyfd = open(tmpname, O_CREAT | O_RDWR | O_TRUNC, S_IRWXU);
+    if (copyfd == -1) {
+        result = -1;
+        goto done;
+    }
+    result = io_copy(fd, copyfd, msg.dbm_len);
+    if (result) {
+        goto cleanup_copyfd;
+    }
+    // seek back to beginning
+    result = lseek(copyfd, 0, SEEK_SET);
+    if (result) {
+        goto cleanup_copyfd;
+    }
+
+    // success
+    *retfd = copyfd;
+    result = 0;
+    goto done;
+  cleanup_copyfd:
+    assert(close(copyfd) == 0);
+  done:
     return result;
 }
 

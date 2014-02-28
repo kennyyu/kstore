@@ -34,6 +34,7 @@ sigint_handler(int sig)
 
 struct server_job_args {
     int fd;
+    unsigned jobid;
 };
 
 // TODO: need a struct server context
@@ -62,52 +63,34 @@ server_routine(void *arg)
     assert(arg != NULL);
     struct server_job_args *sarg = (struct server_job_args *) arg;
     int clientfd = sarg->fd;
+    unsigned jobid = sarg->jobid;
     free(sarg);
     int result;
-    int copyfd;
-    int currfileno = 0;
-    char buf[1024];
 
-    char *payload;
     while (1) {
-        struct db_message msg;
-        result = dbm_read(clientfd, &msg);
+        struct op *op;
+        int copyfd;
+        result = dbm_read_query(clientfd, &op);
         if (result) {
             goto done;
         }
-        switch (msg.dbm_type) {
-        case DB_MESSAGE_QUERY:
-            payload = malloc(sizeof(char) * msg.dbm_len); // includes null byte
-            if (payload == NULL) {
-                goto done;
-            }
-            result = io_read(clientfd, payload, msg.dbm_len);
+        char *query = op_string(op);
+        printf("got query: [%s]\n", query);
+        free(query);
+        if (op->op_type == OP_LOAD) {
+            char buf[32];
+            bzero(buf, sizeof(buf));
+            sprintf(buf, "%u.tmp", jobid);
+            result = dbm_read_file(clientfd, buf, &copyfd);
             if (result) {
-                free(payload);
-                goto done;
-            }
-            printf("got query: [%s]\n", payload);
-            free(payload);
-            break;
-        case DB_MESSAGE_FILE:
-            sprintf(buf, "%d.tmp", currfileno);
-            copyfd = open(buf, O_CREAT | O_RDWR | O_TRUNC, S_IRWXU);
-            if (copyfd == -1) {
-                result = -1;
-                goto done;
-            }
-            result = io_copy(clientfd, copyfd, msg.dbm_len);
-            if (result) {
-                assert(close(copyfd) == 0);
-                goto done;
+                goto cleanup_op;
             }
             printf("got file: %s\n", buf);
-            assert(close(copyfd) == 0);
-            break;
-        default:
-            assert(0);
-            break;
         }
+        continue;
+      cleanup_op:
+        free(op);
+        goto done;
     }
     // TODO send result/error
   done:
@@ -185,6 +168,7 @@ main(void)
     }
 
     // accept in a loop, waiting for more connections
+    unsigned jobid = 0;
     while (keep_running) {
         acceptfd = accept(listenfd, NULL, NULL);
         if (acceptfd == -1) {
@@ -201,6 +185,7 @@ main(void)
             goto cleanup_acceptfd;
         }
         sjob->fd = acceptfd;
+        sjob->jobid = jobid++;
 
         struct job job;
         job.j_arg = (void *) sjob;
