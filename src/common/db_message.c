@@ -5,6 +5,8 @@
 #include <unistd.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <stdio.h>
+#include <stdarg.h>
 #include <string.h>
 #include <stdlib.h>
 #include "include/db_message.h"
@@ -98,12 +100,6 @@ dbm_write_query(int fd, struct op *op)
     if (result) {
         goto cleanup_query;
     }
-    if (op->op_type == OP_LOAD) {
-        result = dbm_write_file(fd, op);
-        if (result) {
-            goto cleanup_query;
-        }
-    }
     result = 0;
     goto cleanup_query;
 
@@ -139,6 +135,7 @@ dbm_read_query(int fd, struct op **retop)
     }
 
     // success
+    printf("got query: [%s]\n", payload);
     *retop = op;
     result = 0;
   cleanup_payload:
@@ -148,7 +145,7 @@ dbm_read_query(int fd, struct op **retop)
 }
 
 int
-dbm_read_file(int fd, char *tmpname, int *retfd)
+dbm_read_file(int fd, unsigned curfileid, int *retfd)
 {
     assert(retfd != NULL);
 
@@ -158,7 +155,10 @@ dbm_read_file(int fd, char *tmpname, int *retfd)
     if (result) {
         goto done;
     }
-    int copyfd = open(tmpname, O_CREAT | O_RDWR | O_TRUNC, S_IRWXU);
+    char buf[32];
+    bzero(buf, sizeof(buf));
+    sprintf(buf, "%u.tmp", curfileid);
+    int copyfd = open(buf, O_CREAT | O_RDWR | O_TRUNC, S_IRWXU);
     if (copyfd == -1) {
         result = -1;
         goto done;
@@ -174,6 +174,7 @@ dbm_read_file(int fd, char *tmpname, int *retfd)
     }
 
     // success
+    printf("got file: %s\n", buf);
     *retfd = copyfd;
     result = 0;
     goto done;

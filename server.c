@@ -15,6 +15,8 @@
 #include "src/common/include/io.h"
 #include "src/common/include/threadpool.h"
 #include "src/common/include/db_message.h"
+#include "src/common/include/array.h"
+#include "src/server/include/storage.h"
 
 #define PORT "5000"
 #define BACKLOG 16
@@ -32,9 +34,31 @@ sigint_handler(int sig)
     printf("Caught shutdown signal, shutting down...\n");
 }
 
-struct server_job_args {
+// tuple of (variable, column_id) to store the
+// result of selects
+struct vartuple {
+    char vt_var[128];
+    struct column_id *vt_column_ids;
+};
+
+struct filetuple {
+    char ft_name[128];
     int fd;
-    unsigned jobid;
+};
+
+DECLARRAY(vartuple);
+DEFARRAY(vartuple, /* no inline */);
+DECLARRAY(filetuple);
+DEFARRAY(filetuple, /* no inline */);
+DECLARRAY(columntuple);
+DEFARRAY(columntuple, /* no inline */);
+
+struct server_job_context {
+    int sj_fd;
+    unsigned sj_jobid;
+    struct columnarray *sj_cols;
+    struct vartuplearray *sj_env;
+    struct filetuplearray *sj_files;
 };
 
 // TODO: need a struct server context
@@ -52,7 +76,7 @@ struct server_job_args {
 //   for each column, build sorted projection if needed
 // select:
 //   perform select, store ids in bitmap
-//   if ASSIGn, map varname -> ID
+//   if ASSIGN, map varname -> ID
 // fetch:
 //   find varname -> lookup by ID
 
@@ -61,9 +85,10 @@ void
 server_routine(void *arg)
 {
     assert(arg != NULL);
-    struct server_job_args *sarg = (struct server_job_args *) arg;
-    int clientfd = sarg->fd;
-    unsigned jobid = sarg->jobid;
+    struct server_job_context *sarg = (struct server_job_context *) arg;
+    int clientfd = sarg->sj_fd;
+    unsigned jobid = sarg->sj_jobid;
+    // TODO: support multiple loads from a single client
     free(sarg);
     int result;
 
@@ -74,18 +99,11 @@ server_routine(void *arg)
         if (result) {
             goto done;
         }
-        char *query = op_string(op);
-        printf("got query: [%s]\n", query);
-        free(query);
         if (op->op_type == OP_LOAD) {
-            char buf[32];
-            bzero(buf, sizeof(buf));
-            sprintf(buf, "%u.tmp", jobid);
-            result = dbm_read_file(clientfd, buf, &copyfd);
+            result = dbm_read_file(clientfd, jobid, &copyfd);
             if (result) {
                 goto cleanup_op;
             }
-            printf("got file: %s\n", buf);
         }
         continue;
       cleanup_op:
@@ -180,12 +198,12 @@ main(void)
         // if we can't add it, clean up the file descriptor.
         // if we are successful, the threadpool will handle
         // cleaning up the file descriptor
-        struct server_job_args *sjob = malloc(sizeof(struct server_job_args));
+        struct server_job_context *sjob = malloc(sizeof(struct server_job_context));
         if (sjob == NULL) {
             goto cleanup_acceptfd;
         }
-        sjob->fd = acceptfd;
-        sjob->jobid = jobid++;
+        sjob->sj_fd = acceptfd;
+        sjob->sj_jobid = jobid++;
 
         struct job job;
         job.j_arg = (void *) sjob;

@@ -46,6 +46,12 @@ parse_stdin(int readfd, int writefd)
         if (result) {
             goto cleanup_ops;
         }
+        if (op->op_type == OP_LOAD) {
+            result = dbm_write_file(writefd, op);
+            if (result) {
+                goto cleanup_ops;
+            }
+        }
     }
     // success
     result = 0;

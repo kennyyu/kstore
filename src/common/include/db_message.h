@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include "operators.h"
+#include "../../server/include/storage.h"
 
 #define DB_MESSAGE_MAGIC 0xDEADBEEF
 
@@ -28,9 +29,9 @@ int dbm_read_query(int fd, struct op **retop);
 
 int dbm_write_file(int fd, struct op *op);
 // the retfd must be closed
-int dbm_read_file(int fd, char *tmpname, int *retfd);
+int dbm_read_file(int fd, unsigned curfileid, int *retfd);
 
-//int dbm_write_result(int fd, struct)
+int dbm_write_result(int fd, struct column_vals *vals);
 // the retvals must be freed
 int dbm_read_result(int fd, int **retvals, int *retn);
 
