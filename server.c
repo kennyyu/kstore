@@ -1,6 +1,7 @@
 #include <arpa/inet.h>
 #include <assert.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <netdb.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -8,9 +9,12 @@
 #include <signal.h>
 #include <sys/socket.h>
 #include <sys/types.h>
+#include <sys/stat.h>
 #include <string.h>
 #include <unistd.h>
+#include "src/common/include/io.h"
 #include "src/common/include/threadpool.h"
+#include "src/common/include/db_message.h"
 
 #define PORT "5000"
 #define BACKLOG 16
@@ -32,16 +36,67 @@ struct server_job_args {
     int fd;
 };
 
+// TODO: need a struct server context
+// array of (name, select ids)
+// array of file names
+
 static
 void
 server_routine(void *arg)
 {
+    assert(arg != NULL);
     struct server_job_args *sarg = (struct server_job_args *) arg;
-    char buf[1024];
-    sprintf(buf, "hello from server");
-    write(sarg->fd, buf, sizeof(buf));
-    assert(close(sarg->fd) == 0);
+    int clientfd = sarg->fd;
     free(sarg);
+    int result;
+    int copyfd;
+    int currfileno = 0;
+    char buf[1024];
+
+    char *payload;
+    while (1) {
+        struct db_message msg;
+        result = dbm_read(clientfd, &msg);
+        if (result) {
+            goto done;
+        }
+        switch (msg.dbm_type) {
+        case DB_MESSAGE_QUERY:
+            payload = malloc(sizeof(char) * msg.dbm_len); // includes null byte
+            if (payload == NULL) {
+                goto done;
+            }
+            result = io_read(clientfd, payload, msg.dbm_len);
+            if (result) {
+                free(payload);
+                goto done;
+            }
+            printf("got query: [%s]\n", payload);
+            free(payload);
+            break;
+        case DB_MESSAGE_FILE:
+            sprintf(buf, "%d.tmp", currfileno);
+            copyfd = open(buf, O_CREAT | O_RDWR | O_TRUNC, S_IRWXU);
+            if (copyfd == -1) {
+                result = -1;
+                goto done;
+            }
+            result = io_copy(clientfd, copyfd, msg.dbm_len);
+            if (result) {
+                assert(close(copyfd) == 0);
+                goto done;
+            }
+            printf("got file: %s\n", buf);
+            assert(close(copyfd) == 0);
+            break;
+        default:
+            assert(0);
+            break;
+        }
+    }
+    // TODO send result/error
+  done:
+    assert(close(clientfd) == 0);
 }
 
 int

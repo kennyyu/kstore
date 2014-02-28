@@ -109,7 +109,7 @@ void testfetch(void) {
 }
 
 void testcreatesorted(void) {
-    char *query = "create(C,sorted)";
+    char *query = "create(C,\"sorted\")";
     struct oparray *ops = parse_query(query);
     assert(oparray_num(ops) == 1);
     struct op *op = oparray_get(ops, 0);
@@ -123,7 +123,7 @@ void testcreatesorted(void) {
 }
 
 void testcreateunsorted(void) {
-    char *query = "create(C,unsorted)";
+    char *query = "create(C,\"unsorted\")";
     struct oparray *ops = parse_query(query);
     assert(oparray_num(ops) == 1);
     struct op *op = oparray_get(ops, 0);
@@ -137,7 +137,7 @@ void testcreateunsorted(void) {
 }
 
 void testcreatebtree(void) {
-    char *query = "create(C,b+tree)";
+    char *query = "create(C,\"b+tree\")";
     struct oparray *ops = parse_query(query);
     assert(oparray_num(ops) == 1);
     struct op *op = oparray_get(ops, 0);
@@ -151,7 +151,7 @@ void testcreatebtree(void) {
 }
 
 void testload(void) {
-    char *query = "load(/home/jharvard/foo.csv)";
+    char *query = "load(\"/home/jharvard/foo.csv\")";
     struct oparray *ops = parse_query(query);
     assert(oparray_num(ops) == 1);
     struct op *op = oparray_get(ops, 0);

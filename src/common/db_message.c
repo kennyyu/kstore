@@ -5,6 +5,7 @@
 #include <unistd.h>
 #include <errno.h>
 #include "include/db_message.h"
+#include "include/io.h"
 
 // 64 bit conversion taken from:
 // http://stackoverflow.com/questions/809902/64-bit-ntohl-in-c
@@ -45,19 +46,13 @@ dbm_write(int fd, struct db_message *message)
     networkmsg.dbm_type = htonl(message->dbm_type);
     networkmsg.dbm_magic = htonl(message->dbm_magic);
     networkmsg.dbm_len = hton64(message->dbm_len);
-    void *buf = (void *) &networkmsg;
-    int total = 0;
-    while (total < sizeof(struct db_message)) {
-        result = write(fd, buf + total, sizeof(struct db_message) - total);
-        switch (result) {
-        case -1:
-            return result;
-        default:
-            total += result;
-            break;
-        }
+    result = io_write(fd, (void *) &networkmsg, sizeof(struct db_message));
+    if (result) {
+        goto done;
     }
-    return 0;
+    result = 0;
+  done:
+    return result;
 }
 
 int
@@ -67,24 +62,15 @@ dbm_read(int fd, struct db_message *message)
 
     int result;
     struct db_message networkmsg;
-    void *buf = (void *) &networkmsg;
-    int total = 0;
-    while (total < sizeof(struct db_message)) {
-        result = read(fd, buf + total, sizeof(struct db_message) - total);
-        switch (result) {
-        case -1:
-            return result;
-        case 0:
-            /* unexpected early EOF */
-            return EIO;
-        default:
-            total += result;
-            break;
-        }
+    result = io_read(fd, (void *) &networkmsg, sizeof(struct db_message));
+    if (result) {
+        goto done;
     }
     message->dbm_type = ntohl(networkmsg.dbm_type);
     message->dbm_magic = ntohl(networkmsg.dbm_magic);
     message->dbm_len = ntoh64(networkmsg.dbm_len);
     assert(message->dbm_magic == DB_MESSAGE_MAGIC);
-    return 0;
+    result = 0;
+  done:
+    return result;
 }

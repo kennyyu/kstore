@@ -5,6 +5,7 @@
 #include "include/io.h"
 
 #define BUFSIZE 4096
+#define MIN(a,b) ((a) < (b)) ? (a) : (b)
 
 enum io_type {
     IO_READ,
@@ -53,10 +54,10 @@ io_write(int fd, void *buf, int nbytes)
 enum io_result
 io_copy(int readfd, int writefd, uint64_t expected_bytes)
 {
-    uint64_t total;
+    uint64_t total = 0;
     int nr, nw;
     char buf[BUFSIZE];
-    while ((nr = read(readfd, buf, BUFSIZE)) > 0) {
+    while ((nr = read(readfd, buf, MIN(BUFSIZE, expected_bytes - total))) > 0) {
         nw = write(writefd, buf, nr);
         assert(nw == nr);
         total += nr;

@@ -54,8 +54,10 @@ job_handle(struct job *job) {
     assert(job != NULL);
     void *arg = job->j_arg;
     void (*routine)(void *) = job->j_routine;
+    printf("starting job...\n");
     routine(arg);
     job_destroy(job);
+    printf("finished job.\n");
 }
 
 static
@@ -86,11 +88,6 @@ thread_worker(void *arg)
         assert(joblist_size(tpool->tp_jobs) != 0);
         struct job *job = joblist_remhead(tpool->tp_jobs);
         lock_release(tpool->tp_lock);
-
-        // TODO: do something with the job
-        printf("thread %d handling job...\n", tnum);
-        sleep(random() % 10);
-        printf("thread %d handling job done.\n", tnum);
         job_handle(job);
     }
 

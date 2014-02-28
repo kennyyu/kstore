@@ -145,7 +145,7 @@ parse_line(char *line)
         goto done;
     }
     bzero(op, sizeof(struct op));
-    if (sscanf(line, "create(%[^,],%[^)])",
+    if (sscanf(line, "create(%[^,],\"%[^)\"])",
         (char *) &op->op_create.op_create_col,
         (char *) stype_buf) == 2) {
         op->op_type = OP_CREATE;
@@ -153,7 +153,7 @@ parse_line(char *line)
         goto done;
     }
     bzero(op, sizeof(struct op));
-    if (sscanf(line, "load(%[^)])",
+    if (sscanf(line, "load(\"%[^)\"])",
         (char *) &op->op_load.op_load_file) == 1) {
         op->op_type = OP_LOAD;
         goto done;

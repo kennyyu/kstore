@@ -69,12 +69,12 @@ char *op_string(struct op *op) {
         break;
     case OP_CREATE:
         stype = storage_type_string(op->op_create.op_create_stype);
-        sprintf(buf, "create(%s,%s)",
+        sprintf(buf, "create(%s,\"%s\")",
                 op->op_create.op_create_col,
                 stype);
         break;
     case OP_LOAD:
-        sprintf(buf, "load(%s)",
+        sprintf(buf, "load(\"%s\")",
                 op->op_load.op_load_file);
         break;
     case OP_INSERT:
