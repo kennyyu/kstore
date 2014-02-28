@@ -97,6 +97,12 @@ dbm_write_query(int fd, struct op *op)
     if (result) {
         goto cleanup_query;
     }
+    if (op->op_type == OP_LOAD) {
+        result = dbm_write_file(fd, op);
+        if (result) {
+            goto cleanup_query;
+        }
+    }
     result = 0;
     goto cleanup_query;
 

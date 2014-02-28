@@ -38,7 +38,22 @@ struct server_job_args {
 
 // TODO: need a struct server context
 // array of (name, select ids)
-// array of file names
+// array of file names -> file descriptors
+// need file descriptor -> parse CSV
+// column names -> file descriptor for unsorted data
+// if type != unsorted-->build sorted projection in new file
+//
+// create:
+//   create new file
+// load:
+//   parse CSV
+//   write unsorted data into columns
+//   for each column, build sorted projection if needed
+// select:
+//   perform select, store ids in bitmap
+//   if ASSIGn, map varname -> ID
+// fetch:
+//   find varname -> lookup by ID
 
 static
 void

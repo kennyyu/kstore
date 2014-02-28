@@ -46,12 +46,6 @@ parse_stdin(int readfd, int writefd)
         if (result) {
             goto cleanup_ops;
         }
-        if (op->op_type == OP_LOAD) {
-            result = dbm_write_file(writefd, op);
-            if (result) {
-                goto cleanup_ops;
-            }
-        }
     }
     // success
     result = 0;
@@ -87,6 +81,7 @@ parse_sockfd(int readfd, int writefd)
         if (result) {
             goto cleanup_payload;
         }
+        // TODO convert back from network byte order
         fetch = (int *) payload;
         for (unsigned i = 0; i < msg.dbm_len / 4; i++) {
             printf("%d\n", fetch[i]);
@@ -110,6 +105,8 @@ parse_sockfd(int readfd, int writefd)
         break;
     }
 
+    // success
+    result = 0;
   cleanup_payload:
     free(payload);
   done:

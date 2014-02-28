@@ -21,7 +21,21 @@ struct db_message {
 
 int dbm_write(int fd, struct db_message *message);
 int dbm_read(int fd, struct db_message *message);
+
 int dbm_write_query(int fd, struct op *op);
+// the retop must be freed
+int dbm_read_query(int fd, struct op **retop);
+
 int dbm_write_file(int fd, struct op *op);
+// the retfd must be closed
+int dbm_read_file(int fd, int *retfd);
+
+//int dbm_write_result(int fd, struct)
+// the retvals must be freed
+int dbm_read_result(int fd, int **retvals, int *retn);
+
+int dbm_write_error(int fd, char *error);
+// retmsg must be freed
+int dbm_read_error(int fd, char **retmsg);
 
 #endif
