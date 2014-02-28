@@ -1,6 +1,7 @@
 #ifndef _STORAGE_H_
 #define _STORAGE_H_
 
+#include <stdint.h>
 #include "../../common/include/operators.h"
 #include "../../common/include/bitmap.h"
 #include "../../common/include/array.h"
@@ -43,6 +44,15 @@ struct column_ids {
 struct column_vals {
     int *cval_vals;
     unsigned cval_len;
+};
+
+struct column_entry_unsorted {
+    int ce_val;
+};
+
+struct column_entry_sorted {
+    int ce_val;
+    uint32_t ce_index;
 };
 
 // create the directory if it doesn't exist, and init metadata file
