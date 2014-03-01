@@ -39,9 +39,10 @@ sigint_handler(int sig)
 // result of selects
 struct vartuple {
     char vt_var[128];
-    struct column_id *vt_column_ids;
+    struct column_ids *vt_column_ids;
 };
 
+// (file name) -> file descriptor to CSV file
 struct filetuple {
     char ft_name[128];
     int fd;
@@ -51,16 +52,52 @@ DECLARRAY(vartuple);
 DEFARRAY(vartuple, /* no inline */);
 DECLARRAY(filetuple);
 DEFARRAY(filetuple, /* no inline */);
-DECLARRAY(columntuple);
-DEFARRAY(columntuple, /* no inline */);
 
-struct server_job_context {
+struct server_jobctx {
     int sj_fd;
     unsigned sj_jobid;
-    struct columnarray *sj_cols;
     struct vartuplearray *sj_env;
     struct filetuplearray *sj_files;
 };
+
+static
+struct server_jobctx *
+server_jobctx_create(int fd, unsigned jobid)
+{
+    struct server_jobctx *jobctx = malloc(sizeof(struct server_jobctx));
+    if (jobctx == NULL) {
+        goto done;
+    }
+    jobctx->sj_env = vartuplearray_create();
+    if (jobctx->sj_env == NULL) {
+        goto cleanup_malloc;
+    }
+    jobctx->sj_files = filetuplearray_create();
+    if (jobctx->sj_files == NULL) {
+        goto cleanup_vartuple;
+    }
+    jobctx->sj_fd = fd;
+    jobctx->sj_jobid = jobid;
+    goto done;
+  cleanup_vartuple:
+    vartuplearray_destroy(jobctx->sj_env);
+  cleanup_malloc:
+    free(jobctx);
+    jobctx = NULL;
+  done:
+    return jobctx;
+}
+
+static
+void
+server_jobctx_destroy(struct server_jobctx *jobctx)
+{
+    assert(jobctx != NULL);
+    vartuplearray_destroy(jobctx->sj_env);
+    filetuplearray_destroy(jobctx->sj_files);
+    assert(close(jobctx->sj_fd) == 0);
+    free(jobctx);
+}
 
 // TODO: need a struct server context
 // array of (name, select ids)
@@ -86,11 +123,11 @@ void
 server_routine(void *arg)
 {
     assert(arg != NULL);
-    struct server_job_context *sarg = (struct server_job_context *) arg;
+    struct server_jobctx *sarg = (struct server_jobctx *) arg;
     int clientfd = sarg->sj_fd;
     unsigned jobid = sarg->sj_jobid;
     // TODO: support multiple loads from a single client
-    free(sarg);
+    // append a file num
     int result;
 
     while (1) {
@@ -113,7 +150,7 @@ server_routine(void *arg)
     }
     // TODO send result/error
   done:
-    assert(close(clientfd) == 0);
+    server_jobctx_destroy(sarg);
 }
 
 int
@@ -206,12 +243,10 @@ main(void)
         // if we can't add it, clean up the file descriptor.
         // if we are successful, the threadpool will handle
         // cleaning up the file descriptor
-        struct server_job_context *sjob = malloc(sizeof(struct server_job_context));
+        struct server_jobctx *sjob = server_jobctx_create(acceptfd, jobid++);
         if (sjob == NULL) {
             goto cleanup_acceptfd;
         }
-        sjob->sj_fd = acceptfd;
-        sjob->sj_jobid = jobid++;
 
         struct job job;
         job.j_arg = (void *) sjob;
