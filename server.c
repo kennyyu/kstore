@@ -21,6 +21,7 @@
 #define PORT "5000"
 #define BACKLOG 16
 #define NTHREADS 16
+#define DBDIR "db"
 
 // boolean to tell the server to keep looping
 static bool volatile keep_running = true;
@@ -178,11 +179,18 @@ main(void)
         goto done;
     }
 
+    // init the storage directory
+    struct storage *storage = storage_init(DBDIR);
+    if (storage == NULL) {
+        fprintf(stderr, "storage failed\n");
+        goto cleanup_listenfd;
+    }
+
     // create a threadpool to handle the connections
     struct threadpool *tpool = threadpool_create(NTHREADS);
     if (tpool == NULL) {
         perror("threadpool");
-        goto cleanup_listenfd;
+        goto cleanup_storage;
     }
 
     // accept in a loop, waiting for more connections
@@ -224,6 +232,8 @@ main(void)
     threadpool_destroy(tpool);
     printf("done.\n");
     result = 0;
+  cleanup_storage:
+    storage_close(storage);
   cleanup_listenfd:
     assert(close(listenfd) == 0);
   done:

@@ -54,6 +54,9 @@ void           bitmap_mark(struct bitmap *, unsigned index);
 void           bitmap_unmark(struct bitmap *, unsigned index);
 int            bitmap_isset(struct bitmap *, unsigned index);
 void           bitmap_destroy(struct bitmap *);
+// bitmap_init will malloc space for it's own copy of bytes
+// so that bitmap_destroy may safely be called
+struct bitmap *bitmap_init(unsigned nbits, unsigned char *bytes);
 
 
 #endif /* _BITMAP_H_ */

@@ -92,6 +92,21 @@ bitmap_create(unsigned nbits) {
     return b;
 }
 
+struct bitmap *
+bitmap_init(unsigned nbits, unsigned char *bytes)
+{
+    assert(bytes != NULL);
+    struct bitmap *b = bitmap_create(nbits);
+    if (b == NULL) {
+        goto done;
+    }
+    memcpy(b->v, bytes, nbits / BITS_PER_WORD);
+    goto done;
+
+  done:
+    return b;
+}
+
 void *
 bitmap_getdata(struct bitmap *b) {
     return b->v;
