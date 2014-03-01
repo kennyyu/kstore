@@ -157,8 +157,10 @@ server_eval_load(struct server_jobctx *jobctx, struct op *op)
         result = column_load(col, (int *) csvheader->csv_vals->arr.v,
                              intarray_num(csvheader->csv_vals));
         if (result) {
+            fprintf(stderr, "column load failed\n");
             goto cleanup_column;
         }
+        column_close(col);
         continue;
 
       cleanup_column:
@@ -193,6 +195,7 @@ server_eval_create(struct server_jobctx *jobctx, struct op *op)
     assert(jobctx != NULL);
     assert(op != NULL);
     assert(op->op_type == OP_CREATE);
+    printf("eval create %s\n", op->op_create.op_create_col);
     return storage_add_column(jobctx->sj_storage, op->op_create.op_create_col,
                               op->op_create.op_create_stype);
 }

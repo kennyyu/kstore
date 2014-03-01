@@ -75,8 +75,8 @@ storage_close(struct storage *storage)
     // do not need to acquire the lock
     // since there are no other threads running, then the open columns
     // should have been closed when the threads exited
-    assert(columnarray_num(storage->st_open_cols) == 0);
     lock_destroy(storage->st_lock);
+    assert(columnarray_num(storage->st_open_cols) == 0);
     columnarray_destroy(storage->st_open_cols);
     file_close(storage->st_file);
     free(storage);
@@ -205,6 +205,7 @@ storage_add_column(struct storage *storage, char *colname,
     bool found = storage_find_column(storage, colname, &freefound,
                                      &colpage, &colindex);
     if (found) {
+        result = 0;
         goto done;
     }
 
@@ -387,6 +388,9 @@ column_load(struct column *col, int *vals, uint64_t num)
     assert(col != NULL);
     assert(vals != NULL);
     int result;
+    for (uint64_t i = 0; i < num; i++) {
+        printf("%d\n", vals[i]);
+    }
     lock_acquire(col->col_lock);
 
     int intbuf[PAGESIZE / sizeof(int)];

@@ -90,6 +90,8 @@ file_alloc_page(struct file *f, page_t *retpage)
     unsigned nbits = PAGESIZE * 8;
     for (page = 0; page < nbits; page++) {
         if (!bitmap_isset(f->f_page_bitmap, page)) {
+            bitmap_mark(f->f_page_bitmap, page);
+            assert(file_write(f, 0, bitmap_getdata(f->f_page_bitmap)) == 0);
             break;
         }
     }
