@@ -29,7 +29,7 @@ int dbm_read_query(int fd, struct op **retop);
 
 int dbm_write_file(int fd, struct op *op);
 // the retfd must be closed
-int dbm_read_file(int fd, unsigned curfileid, int *retfd);
+int dbm_read_file(int fd, char *filename, int *retfd);
 
 int dbm_write_result(int fd, struct column_vals *vals);
 // the retvals must be freed

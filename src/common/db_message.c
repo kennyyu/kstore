@@ -145,7 +145,7 @@ dbm_read_query(int fd, struct op **retop)
 }
 
 int
-dbm_read_file(int fd, unsigned curfileid, int *retfd)
+dbm_read_file(int fd, char *filename, int *retfd)
 {
     assert(retfd != NULL);
 
@@ -155,10 +155,7 @@ dbm_read_file(int fd, unsigned curfileid, int *retfd)
     if (result) {
         goto done;
     }
-    char buf[32];
-    bzero(buf, sizeof(buf));
-    sprintf(buf, "%u.tmp", curfileid);
-    int copyfd = open(buf, O_CREAT | O_RDWR | O_TRUNC, S_IRWXU);
+    int copyfd = open(filename, O_CREAT | O_RDWR | O_TRUNC, S_IRWXU);
     if (copyfd == -1) {
         result = -1;
         goto done;
@@ -174,7 +171,7 @@ dbm_read_file(int fd, unsigned curfileid, int *retfd)
     }
 
     // success
-    printf("got file: %s\n", buf);
+    printf("got file: %s\n", filename);
     *retfd = copyfd;
     result = 0;
     goto done;

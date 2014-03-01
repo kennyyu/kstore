@@ -158,14 +158,10 @@ server_eval_load(struct server_jobctx *jobctx, struct op *op)
                              intarray_num(csvheader->csv_vals));
         if (result) {
             fprintf(stderr, "column load failed\n");
-            goto cleanup_column;
+            column_close(col);
+            goto cleanup_csv;
         }
         column_close(col);
-        continue;
-
-      cleanup_column:
-        column_close(col);
-        goto cleanup_csv;
     }
 
   cleanup_csv:
@@ -196,8 +192,12 @@ server_eval_create(struct server_jobctx *jobctx, struct op *op)
     assert(op != NULL);
     assert(op->op_type == OP_CREATE);
     printf("eval create %s\n", op->op_create.op_create_col);
-    return storage_add_column(jobctx->sj_storage, op->op_create.op_create_col,
-                              op->op_create.op_create_stype);
+    int result = storage_add_column(jobctx->sj_storage, op->op_create.op_create_col,
+                                    op->op_create.op_create_stype);
+    if (result) {
+        fprintf(stderr, "storage_add_column failed\n");
+    }
+    return result;
 }
 
 // TODO: need a struct server context
@@ -254,8 +254,7 @@ server_routine(void *arg)
     struct server_jobctx *sarg = (struct server_jobctx *) arg;
     int clientfd = sarg->sj_fd;
     unsigned jobid = sarg->sj_jobid;
-    // TODO: support multiple loads from a single client
-    // append a file num
+    unsigned loadid = 0;
     int result;
 
     while (1) {
@@ -266,7 +265,11 @@ server_routine(void *arg)
         }
         if (op->op_type == OP_LOAD) {
             int copyfd;
-            result = dbm_read_file(clientfd, jobid, &copyfd);
+            char filenamebuf[128];
+            sprintf(filenamebuf, "%s/jobid-%d.loadid-%d.tmp",
+                    sarg->sj_storage->st_dbdir, jobid, loadid);
+            loadid++;
+            result = dbm_read_file(clientfd, filenamebuf, &copyfd);
             if (result) {
                 goto cleanup_op;
             }
@@ -300,8 +303,6 @@ server_routine(void *arg)
 int
 main(void)
 {
-    printf("hello server\n");
-
     int result;
     int listenfd, acceptfd;
     struct addrinfo hints, *servinfo;

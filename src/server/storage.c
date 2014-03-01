@@ -387,9 +387,6 @@ column_load(struct column *col, int *vals, uint64_t num)
     assert(col != NULL);
     assert(vals != NULL);
     int result;
-    for (uint64_t i = 0; i < num; i++) {
-        printf("%d\n", vals[i]);
-    }
     lock_acquire(col->col_lock);
 
     int intbuf[PAGESIZE / sizeof(int)];
