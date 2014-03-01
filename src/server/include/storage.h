@@ -7,6 +7,9 @@
 #include "../../common/include/array.h"
 #include "file.h"
 
+#define COLUMN_TAKEN 0xCAFEBABE
+#define COLUMN_FREE 0x0
+
 // NOTE: we do not support deletions yet
 // on disk representation of a file
 // these will be stored in the metadata file pointed to by storage
@@ -16,22 +19,26 @@ struct column_on_disk {
     uint64_t cd_ntuples; // number of tuples in this column
     uint32_t cd_stype; // enum storage_type
     uint32_t cd_magic; // magic value for debugging
-    char cd_file_name[112]; // name of file where data is stored
+    char cd_file_name[112]; // file where data is stored, does not include dbdir
 };
+
+#define COLUMNS_PER_PAGE (PAGESIZE / sizeof(struct column_on_disk))
 
 // in memory representation
 struct column {
     struct storage *col_storage;
-    volatile struct column_on_disk *col_disk;
+    struct column_on_disk col_disk;
     struct file *col_file;
     struct lock *col_lock;
-    unsigned col_id; // index in the storage file
+    page_t col_page; // page in the storage file
+    unsigned col_index; // index in the page in the storage file
     volatile unsigned col_opencount; // ref count on number of times open
 };
 
 DECLARRAY(column);
 
 struct storage {
+    char st_dbdir[128]; // name of the db directory
     struct file *st_file; // pointer to metadata file
     struct lock *st_lock; // protect addition of columns
     struct columnarray *st_open_cols; // array of open columns
@@ -63,7 +70,7 @@ void storage_close(struct storage *storage);
 // if there is, return error? return existing column or create it
 // add it to list of open cols
 int storage_add_column(struct storage *storage, char *colname,
-                       enum storage_type stype, struct column **retcol);
+                       enum storage_type stype);
 
 // if not in array, add it and inc ref count
 struct column *column_open(struct storage *storage, char *colname);
@@ -71,8 +78,8 @@ struct column *column_open(struct storage *storage, char *colname);
 // dec ref count, close it if 0
 void column_close(struct column *col);
 
-// used for load/insert to init the column with values
 int column_insert(struct column, int val);
+int column_load(struct column, int *vals, unsigned num);
 
 // need reader/writer locks for select,fetch (read) and insert(write)
 struct column_ids *column_select(struct column, struct op *op);

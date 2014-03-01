@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdint.h>
+#include <stdbool.h>
 #include <string.h>
 #include <fcntl.h>
 #include <unistd.h>
@@ -85,7 +86,7 @@ file_close(struct file *f)
 int
 file_alloc_page(struct file *f, page_t *retpage)
 {
-    unsigned page;
+    page_t page;
     unsigned nbits = PAGESIZE * 8;
     for (page = 0; page < nbits; page++) {
         if (!bitmap_isset(f->f_page_bitmap, page)) {
@@ -117,6 +118,22 @@ file_free_page(struct file *f, page_t page)
     assert(f->f_page_bitmap != NULL);
     assert(bitmap_isset(f->f_page_bitmap, page));
     bitmap_unmark(f->f_page_bitmap, page);
+}
+
+bool
+file_page_isalloc(struct file *f, page_t page)
+{
+    assert(f != NULL);
+    assert(f->f_page_bitmap != NULL);
+    return bitmap_isset(f->f_page_bitmap, page);
+}
+
+// returns the total number of pages in the file, alloc'ed or freed
+page_t
+file_num_pages(struct file *f)
+{
+    assert(f != NULL);
+    return (page_t) (f->f_size / PAGESIZE);
 }
 
 // we use pread/pwrite here to avoid modifying the file descriptor offset
