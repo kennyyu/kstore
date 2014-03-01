@@ -16,6 +16,7 @@
 #include "src/common/include/threadpool.h"
 #include "src/common/include/db_message.h"
 #include "src/common/include/array.h"
+#include "src/common/include/csv.h"
 #include "src/server/include/storage.h"
 
 #define PORT "5000"
@@ -45,7 +46,7 @@ struct vartuple {
 // (file name) -> file descriptor to CSV file
 struct filetuple {
     char ft_name[128];
-    int fd;
+    int ft_fd;
 };
 
 DECLARRAY(vartuple);
@@ -56,13 +57,14 @@ DEFARRAY(filetuple, /* no inline */);
 struct server_jobctx {
     int sj_fd;
     unsigned sj_jobid;
+    struct storage *sj_storage;
     struct vartuplearray *sj_env;
     struct filetuplearray *sj_files;
 };
 
 static
 struct server_jobctx *
-server_jobctx_create(int fd, unsigned jobid)
+server_jobctx_create(int fd, unsigned jobid, struct storage *storage)
 {
     struct server_jobctx *jobctx = malloc(sizeof(struct server_jobctx));
     if (jobctx == NULL) {
@@ -78,6 +80,7 @@ server_jobctx_create(int fd, unsigned jobid)
     }
     jobctx->sj_fd = fd;
     jobctx->sj_jobid = jobid;
+    jobctx->sj_storage = storage;
     goto done;
   cleanup_vartuple:
     vartuplearray_destroy(jobctx->sj_env);
@@ -93,10 +96,105 @@ void
 server_jobctx_destroy(struct server_jobctx *jobctx)
 {
     assert(jobctx != NULL);
+    while (vartuplearray_num(jobctx->sj_env) > 0) {
+        struct vartuple *v = vartuplearray_get(jobctx->sj_env, 0);
+        free(v);
+        vartuplearray_remove(jobctx->sj_env, 0);
+    }
     vartuplearray_destroy(jobctx->sj_env);
+    while (filetuplearray_num(jobctx->sj_files) > 0) {
+        struct filetuple *f = filetuplearray_get(jobctx->sj_files, 0);
+        free(f);
+        filetuplearray_remove(jobctx->sj_files, 0);
+    }
     filetuplearray_destroy(jobctx->sj_files);
-    assert(close(jobctx->sj_fd) == 0);
+    // jobctx->sj_fd should be closed in load handler
     free(jobctx);
+}
+
+static
+int
+server_eval_select(struct server_jobctx *jobctx, struct op *op)
+{
+    return 0;
+}
+
+static
+int
+server_eval_load(struct server_jobctx *jobctx, struct op *op)
+{
+    assert(jobctx != NULL);
+    assert(op != NULL);
+    assert(op->op_type == OP_LOAD);
+
+    // find the csv file descriptor for the load file name
+    int csvfd = -1;
+    for (unsigned i = 0; i < filetuplearray_num(jobctx->sj_files); i++) {
+        struct filetuple *ftuple = filetuplearray_get(jobctx->sj_files, i);
+        if (strcmp(ftuple->ft_name, op->op_load.op_load_file) == 0) {
+            csvfd = ftuple->ft_fd;
+            break;
+        }
+    }
+    assert(csvfd != -1);
+    int result;
+
+    // parse the csv
+    struct csv_resultarray *results = csv_parse(csvfd);
+    if (results == NULL) {
+        result = -1;
+        goto done;
+    }
+
+    // for each column, load the data into that column
+    for (unsigned i = 0; i < csv_resultarray_num(results); i++) {
+        struct csv_result *csvheader = csv_resultarray_get(results, i);
+        struct column *col =
+                column_open(jobctx->sj_storage, csvheader->csv_colname);
+        if (col == NULL) {
+            goto cleanup_csv;
+        }
+        result = column_load(col, (int *) csvheader->csv_vals->arr.v,
+                             intarray_num(csvheader->csv_vals));
+        if (result) {
+            goto cleanup_column;
+        }
+        continue;
+
+      cleanup_column:
+        column_close(col);
+        goto cleanup_csv;
+    }
+
+  cleanup_csv:
+    csv_destroy(results);
+  done:
+    return result;
+}
+
+static
+int
+server_eval_fetch(struct server_jobctx *jobctx, struct op *op)
+{
+    return 0;
+}
+
+static
+int
+server_eval_insert(struct server_jobctx *jobctx, struct op *op)
+{
+    return 0;
+}
+
+static
+int
+server_eval_create(struct server_jobctx *jobctx, struct op *op)
+{
+    assert(jobctx != NULL);
+    assert(op != NULL);
+    assert(op->op_type == OP_CREATE);
+    return storage_add_column(jobctx->sj_storage, op->op_create.op_create_col,
+                              op->op_create.op_create_stype);
 }
 
 // TODO: need a struct server context
@@ -117,6 +215,33 @@ server_jobctx_destroy(struct server_jobctx *jobctx)
 //   if ASSIGN, map varname -> ID
 // fetch:
 //   find varname -> lookup by ID
+static
+int
+server_eval(struct server_jobctx *jobctx, struct op *op)
+{
+    assert(jobctx != NULL);
+    assert(op != NULL);
+    switch (op->op_type) {
+    case OP_SELECT_ALL_ASSIGN:
+    case OP_SELECT_RANGE_ASSIGN:
+    case OP_SELECT_VALUE_ASSIGN:
+    case OP_SELECT_ALL:
+    case OP_SELECT_RANGE:
+    case OP_SELECT_VALUE:
+        return server_eval_select(jobctx, op);
+    case OP_FETCH:
+        return server_eval_fetch(jobctx, op);
+    case OP_CREATE:
+        return server_eval_create(jobctx, op);
+    case OP_LOAD:
+        return server_eval_load(jobctx, op);
+    case OP_INSERT:
+        return server_eval_insert(jobctx, op);
+    default:
+        assert(0);
+        return -1;
+    }
+}
 
 static
 void
@@ -132,16 +257,32 @@ server_routine(void *arg)
 
     while (1) {
         struct op *op;
-        int copyfd;
         result = dbm_read_query(clientfd, &op);
         if (result) {
             goto done;
         }
         if (op->op_type == OP_LOAD) {
+            int copyfd;
             result = dbm_read_file(clientfd, jobid, &copyfd);
             if (result) {
                 goto cleanup_op;
             }
+            struct filetuple *ftuple = malloc(sizeof(struct filetuple));
+            if (ftuple == NULL) {
+                goto cleanup_op;
+            }
+            // TODO: file names are larger than ftuple char buf
+            strcpy(ftuple->ft_name, op->op_load.op_load_file);
+            ftuple->ft_fd = copyfd;
+            result = filetuplearray_add(sarg->sj_files, ftuple, NULL);
+            if (result) {
+                free(ftuple);
+                goto cleanup_op;
+            }
+        }
+        result = server_eval(sarg, op);
+        if (result) {
+            goto cleanup_op;
         }
         continue;
       cleanup_op:
@@ -243,7 +384,8 @@ main(void)
         // if we can't add it, clean up the file descriptor.
         // if we are successful, the threadpool will handle
         // cleaning up the file descriptor
-        struct server_jobctx *sjob = server_jobctx_create(acceptfd, jobid++);
+        struct server_jobctx *sjob =
+                server_jobctx_create(acceptfd, jobid++, storage);
         if (sjob == NULL) {
             goto cleanup_acceptfd;
         }
