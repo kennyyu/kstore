@@ -31,7 +31,7 @@ csv_destroy(struct csv_resultarray *results)
 }
 
 struct csv_resultarray *
-csv_parse_header(int fd)
+csv_parse(int fd)
 {
     int result;
     result = lseek(fd, 0, SEEK_SET);

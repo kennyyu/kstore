@@ -13,7 +13,7 @@ struct csv_result {
 
 DECLARRAY(csv_result);
 
-struct csv_resultarray *csv_parse_header(int fd);
+struct csv_resultarray *csv_parse(int fd);
 void csv_destroy(struct csv_resultarray *results);
 
 #endif
