@@ -78,12 +78,12 @@ struct column *column_open(struct storage *storage, char *colname);
 // dec ref count, close it if 0
 void column_close(struct column *col);
 
-int column_insert(struct column, int val);
-int column_load(struct column, int *vals, unsigned num);
+int column_insert(struct column *col, int val);
+int column_load(struct column *col, int *vals, uint64_t num);
 
 // need reader/writer locks for select,fetch (read) and insert(write)
-struct column_ids *column_select(struct column, struct op *op);
-struct column_vals *column_fetch(struct column, struct column_ids *ids);
+struct column_ids *column_select(struct column *col, struct op *op);
+struct column_vals *column_fetch(struct column *col, struct column_ids *ids);
 void column_ids_destroy(struct column_ids *cids);
 void column_vals_destroy(struct column_vals *vals);
 

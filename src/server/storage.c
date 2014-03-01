@@ -17,6 +17,8 @@
 
 #define METADATA_FILENAME "metadata"
 
+#define MIN(a,b) ((a) < (b)) ? (a) : (b)
+
 DEFARRAY(column, /* no inline */);
 
 // create the directory if it doesn't exist, and init metadata file
@@ -156,6 +158,32 @@ storage_find_column_open(struct storage *storage, char *colname,
     return false;
 }
 
+// PRECONDITION: must hold lock on storage
+static
+int
+storage_synch_column(struct storage *storage,
+                     struct column_on_disk *coldisk,
+                     page_t page,
+                     unsigned index)
+{
+    assert(storage != NULL);
+    assert(coldisk != NULL);
+
+    int result;
+    struct column_on_disk colbuf[COLUMNS_PER_PAGE];
+    result = file_read(storage->st_file, page, colbuf);
+    if (result) {
+        goto done;
+    }
+    colbuf[index] = *coldisk;
+    result = file_write(storage->st_file, page, colbuf);
+    if (result) {
+        goto done;
+    }
+  done:
+    return result;
+}
+
 int
 storage_add_column(struct storage *storage, char *colname,
                    enum storage_type stype)
@@ -210,13 +238,7 @@ storage_add_column(struct storage *storage, char *colname,
         colindex = 0;
     }
     // finally write the new column to disk
-    struct column_on_disk colbuf[COLUMNS_PER_PAGE];
-    result = file_read(storage->st_file, colpage, colbuf);
-    if (result) {
-        goto cleanup_page;
-    }
-    colbuf[colindex] = newcol;
-    result = file_write(storage->st_file, colpage, colbuf);
+    result = storage_synch_column(storage, &newcol, colpage, colindex);
     if (result) {
         goto cleanup_page;
     }
@@ -356,4 +378,56 @@ column_close(struct column *col)
 
   done:
     lock_release(storage->st_lock);
+}
+// TODO add column sync
+
+int
+column_load(struct column *col, int *vals, uint64_t num)
+{
+    assert(col != NULL);
+    assert(vals != NULL);
+    int result;
+    lock_acquire(col->col_lock);
+
+    int intbuf[PAGESIZE / sizeof(int)];
+    uint64_t curtuple = 0;
+    while (curtuple < num) {
+        uint64_t tuples_tocopy = num - curtuple;
+        // avoid overflow
+        size_t bytes_tocopy =
+                PAGESIZE * MIN(PAGESIZE / sizeof(int), tuples_tocopy);
+        bzero(intbuf, PAGESIZE);
+        memcpy(intbuf, vals, bytes_tocopy);
+        page_t page;
+        result = file_alloc_page(col->col_file, &page);
+        if (result) {
+            goto cleanup_col_lock;
+        }
+        result = file_write(col->col_file, page, intbuf);
+        if (result) {
+            file_free_page(col->col_file, page);
+            goto cleanup_col_lock;
+        }
+        curtuple += tuples_tocopy;
+    }
+
+    // to avoid deadlock, we must drop the column lock and
+    // grab the lock on storage first
+    // synch updated column data to disk
+    struct storage *storage = col->col_storage;
+    lock_release(col->col_lock);
+
+    lock_acquire(storage->st_lock);
+    lock_acquire(col->col_lock);
+    result = storage_synch_column(storage, &col->col_disk,
+                                  col->col_page, col->col_index);
+    // return result
+    lock_release(col->col_lock);
+    lock_release(storage->st_lock);
+    goto done;
+
+  cleanup_col_lock:
+    lock_release(col->col_lock);
+  done:
+    return result;
 }
