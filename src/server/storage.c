@@ -380,7 +380,6 @@ column_close(struct column *col)
   done:
     lock_release(storage->st_lock);
 }
-// TODO add column sync
 
 int
 column_load(struct column *col, int *vals, uint64_t num)
@@ -399,9 +398,9 @@ column_load(struct column *col, int *vals, uint64_t num)
         uint64_t tuples_tocopy = num - curtuple;
         // avoid overflow
         size_t bytes_tocopy =
-                PAGESIZE * MIN(PAGESIZE / sizeof(int), tuples_tocopy);
+                sizeof(int) * (MIN(PAGESIZE / sizeof(int), tuples_tocopy));
         bzero(intbuf, PAGESIZE);
-        memcpy(intbuf, vals, bytes_tocopy);
+        memcpy(intbuf, vals + curtuple, bytes_tocopy);
         page_t page;
         result = file_alloc_page(col->col_file, &page);
         if (result) {
