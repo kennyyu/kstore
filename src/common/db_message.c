@@ -152,22 +152,17 @@ rpc_read_query(int fd, struct rpc_header *msg, struct op **retop)
 }
 
 int
-rpc_read_file(int fd, char *filename, int *retfd)
+rpc_read_file(int fd, struct rpc_header *msg, char *filename, int *retfd)
 {
     assert(retfd != NULL);
 
     int result;
-    struct rpc_header msg;
-    result = rpc_read_header(fd, &msg);
-    if (result) {
-        goto done;
-    }
     int copyfd = open(filename, O_CREAT | O_RDWR | O_TRUNC, S_IRWXU);
     if (copyfd == -1) {
         result = -1;
         goto done;
     }
-    result = io_copy(fd, copyfd, msg.rpc_len);
+    result = io_copy(fd, copyfd, msg->rpc_len);
     if (result) {
         goto cleanup_copyfd;
     }

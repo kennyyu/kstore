@@ -379,6 +379,7 @@ server_routine(void *arg)
     while (1) {
         struct op *op;
         struct rpc_header msg;
+        struct rpc_header loadmsg;
         result = rpc_read_header(clientfd, &msg);
         if (result) {
             goto done;
@@ -389,7 +390,7 @@ server_routine(void *arg)
             assert(rpc_write_terminate(clientfd) == 0);
             goto done;
         case RPC_QUERY:
-            // handle DB_MESSAGE_FILE here as well
+            // handle RPC_FILE here as well
             result = rpc_read_query(clientfd, &msg, &op);
             if (result) {
                 goto done;
@@ -400,7 +401,12 @@ server_routine(void *arg)
                 sprintf(filenamebuf, "%s/jobid-%d.loadid-%d.tmp",
                         sarg->sj_storage->st_dbdir, jobid, loadid);
                 loadid++;
-                result = rpc_read_file(clientfd, filenamebuf, &copyfd);
+                result = rpc_read_header(clientfd, &loadmsg);
+                if (result) {
+                    goto cleanup_op;
+                }
+                assert(loadmsg.rpc_type = RPC_FILE);
+                result = rpc_read_file(clientfd, &loadmsg, filenamebuf, &copyfd);
                 if (result) {
                     goto cleanup_op;
                 }

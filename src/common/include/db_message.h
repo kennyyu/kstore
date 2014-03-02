@@ -36,7 +36,7 @@ int rpc_read_query(int fd, struct rpc_header *msg, struct op **retop);
 
 int rpc_write_file(int fd, struct op *op);
 // the retfd must be closed
-int rpc_read_file(int fd, char *filename, int *retfd);
+int rpc_read_file(int fd, struct rpc_header *msg, char *filename, int *retfd);
 
 int rpc_write_fetch_result(int fd, struct column_vals *vals);
 // the retvals must be freed
