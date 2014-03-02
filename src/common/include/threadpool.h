@@ -5,7 +5,7 @@ struct threadpool;
 
 struct job {
     void *j_arg;
-    void (*j_routine)(void *arg);
+    void (*j_routine)(void *arg, unsigned threadnum);
 };
 
 struct threadpool *threadpool_create(unsigned nthreads);

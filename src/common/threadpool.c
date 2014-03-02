@@ -50,14 +50,14 @@ job_destroy(struct job *job) {
 // any errors and closing the file descriptor.
 static
 void
-job_handle(struct job *job) {
+job_handle(struct job *job, unsigned threadnum) {
     assert(job != NULL);
     void *arg = job->j_arg;
-    void (*routine)(void *) = job->j_routine;
-    printf("starting job...\n");
-    routine(arg);
+    void (*routine)(void *, unsigned) = job->j_routine;
+    printf("[Thread %u] starting job...\n", threadnum);
+    routine(arg, threadnum);
     job_destroy(job);
-    printf("finished job.\n");
+    printf("[Thread %u] finished job.\n", threadnum);
 }
 
 static
@@ -88,7 +88,7 @@ thread_worker(void *arg)
         assert(joblist_size(tpool->tp_jobs) != 0);
         struct job *job = joblist_remhead(tpool->tp_jobs);
         lock_release(tpool->tp_lock);
-        job_handle(job);
+        job_handle(job, tnum);
     }
 
   shutdown:

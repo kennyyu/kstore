@@ -349,7 +349,7 @@ server_eval(struct server_jobctx *jobctx, struct op *op)
 
 static
 void
-server_routine(void *arg)
+server_routine(void *arg, unsigned threadnum)
 {
     assert(arg != NULL);
     struct server_jobctx *sarg = (struct server_jobctx *) arg;
@@ -368,7 +368,7 @@ server_routine(void *arg)
         }
         switch (msg.rpc_type) {
         case RPC_TERMINATE:
-            printf("received TERMINATE\n");
+            printf("[Thread %u] received TERMINATE\n", threadnum);
             assert(rpc_write_terminate(clientfd) == 0);
             goto done;
         case RPC_QUERY:
