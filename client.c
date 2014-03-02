@@ -119,6 +119,9 @@ parse_sockfd(int readfd, int writefd)
         goto done;
     }
     switch (msg.dbm_type) {
+    case DB_MESSAGE_TERMINATE:
+        result = -1;
+        break;
     case DB_MESSAGE_FETCH_RESULT:
         result = client_handle_result(readfd, writefd, &msg);
         break;
@@ -195,7 +198,13 @@ main(void)
         if (read_stdin && FD_ISSET(STDIN_FILENO, &readfds)) {
             result = parse_stdin(STDIN_FILENO, sockfd);
             if (result) {
+                // if stdin is done, send a connection termination message
+                // to the server
                 read_stdin = false;
+                result = dbm_write_terminate(sockfd);
+                if (result) {
+                    goto cleanup_sockfd;
+                }
             }
         }
 

@@ -63,6 +63,16 @@ dbm_write(int fd, struct db_message *message)
 }
 
 int
+dbm_write_terminate(int fd)
+{
+    struct db_message msg;
+    msg.dbm_type = DB_MESSAGE_TERMINATE;
+    msg.dbm_len = 0;
+    msg.dbm_magic = DB_MESSAGE_MAGIC;
+    return dbm_write(fd, &msg);
+}
+
+int
 dbm_read(int fd, struct db_message *message)
 {
     assert(message != NULL);
@@ -109,22 +119,19 @@ dbm_write_query(int fd, struct op *op)
 }
 
 int
-dbm_read_query(int fd, struct op **retop)
+dbm_read_query(int fd, struct db_message *msg, struct op **retop)
 {
     assert(retop != NULL);
+    assert(msg != NULL);
+    assert(retop != NULL);
+    assert(msg->dbm_type == DB_MESSAGE_QUERY);
 
     int result;
-    struct db_message msg;
-    result = dbm_read(fd, &msg);
-    if (result) {
-        goto done;
-    }
-    assert(msg.dbm_type == DB_MESSAGE_QUERY);
-    char *payload = malloc(sizeof(char) * msg.dbm_len); // includes null byte
+    char *payload = malloc(sizeof(char) * msg->dbm_len); // includes null byte
     if (payload == NULL) {
         goto done;
     }
-    result = io_read(fd, payload, msg.dbm_len);
+    result = io_read(fd, payload, msg->dbm_len);
     if (result) {
         goto cleanup_payload;
     }

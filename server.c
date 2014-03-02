@@ -378,38 +378,56 @@ server_routine(void *arg)
 
     while (1) {
         struct op *op;
-        result = dbm_read_query(clientfd, &op);
+        struct db_message msg;
+        result = dbm_read(clientfd, &msg);
         if (result) {
             goto done;
         }
-        if (op->op_type == OP_LOAD) {
-            int copyfd;
-            char filenamebuf[128];
-            sprintf(filenamebuf, "%s/jobid-%d.loadid-%d.tmp",
-                    sarg->sj_storage->st_dbdir, jobid, loadid);
-            loadid++;
-            result = dbm_read_file(clientfd, filenamebuf, &copyfd);
+        switch (msg.dbm_type) {
+        case DB_MESSAGE_TERMINATE:
+            printf("received TERMINATE\n");
+            assert(dbm_write_terminate(clientfd) == 0);
+            goto done;
+        case DB_MESSAGE_QUERY:
+            // handle DB_MESSAGE_FILE here as well
+            result = dbm_read_query(clientfd, &msg, &op);
+            if (result) {
+                goto done;
+            }
+            if (op->op_type == OP_LOAD) {
+                int copyfd;
+                char filenamebuf[128];
+                sprintf(filenamebuf, "%s/jobid-%d.loadid-%d.tmp",
+                        sarg->sj_storage->st_dbdir, jobid, loadid);
+                loadid++;
+                result = dbm_read_file(clientfd, filenamebuf, &copyfd);
+                if (result) {
+                    goto cleanup_op;
+                }
+                struct filetuple *ftuple = malloc(sizeof(struct filetuple));
+                if (ftuple == NULL) {
+                    goto cleanup_op;
+                }
+                // TODO: file names are larger than ftuple char buf
+                strcpy(ftuple->ft_name, op->op_load.op_load_file);
+                ftuple->ft_fd = copyfd;
+                result = filetuplearray_add(sarg->sj_files, ftuple, NULL);
+                if (result) {
+                    free(ftuple);
+                    goto cleanup_op;
+                }
+            }
+            result = server_eval(sarg, op);
             if (result) {
                 goto cleanup_op;
             }
-            struct filetuple *ftuple = malloc(sizeof(struct filetuple));
-            if (ftuple == NULL) {
-                goto cleanup_op;
-            }
-            // TODO: file names are larger than ftuple char buf
-            strcpy(ftuple->ft_name, op->op_load.op_load_file);
-            ftuple->ft_fd = copyfd;
-            result = filetuplearray_add(sarg->sj_files, ftuple, NULL);
-            if (result) {
-                free(ftuple);
-                goto cleanup_op;
-            }
-        }
-        result = server_eval(sarg, op);
-        if (result) {
-            goto cleanup_op;
+            break;
+        default:
+            assert(0);
+            break;
         }
         continue;
+
       cleanup_op:
         free(op);
         goto done;

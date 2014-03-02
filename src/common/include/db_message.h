@@ -12,6 +12,7 @@ enum db_message_type {
     DB_MESSAGE_FILE,
     DB_MESSAGE_FETCH_RESULT,
     DB_MESSAGE_ERROR,
+    DB_MESSAGE_TERMINATE,
 };
 
 struct db_message {
@@ -25,7 +26,7 @@ int dbm_read(int fd, struct db_message *message);
 
 int dbm_write_query(int fd, struct op *op);
 // the retop must be freed
-int dbm_read_query(int fd, struct op **retop);
+int dbm_read_query(int fd, struct db_message *msg, struct op **retop);
 
 int dbm_write_file(int fd, struct op *op);
 // the retfd must be closed
@@ -38,5 +39,7 @@ int dbm_read_result(int fd, struct db_message *msg, int **retvals, int *retn);
 int dbm_write_error(int fd, char *error);
 // retmsg must be freed
 int dbm_read_error(int fd, struct db_message *msg, char **retmsg);
+
+int dbm_write_terminate(int fd);
 
 #endif
