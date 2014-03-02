@@ -98,25 +98,19 @@ server_jobctx_destroy(struct server_jobctx *jobctx)
     assert(jobctx != NULL);
     while (vartuplearray_num(jobctx->sj_env) > 0) {
         struct vartuple *v = vartuplearray_get(jobctx->sj_env, 0);
+        column_ids_destroy(v->vt_column_ids);
         free(v);
         vartuplearray_remove(jobctx->sj_env, 0);
     }
     vartuplearray_destroy(jobctx->sj_env);
     while (filetuplearray_num(jobctx->sj_files) > 0) {
         struct filetuple *f = filetuplearray_get(jobctx->sj_files, 0);
+        // load file descriptor closed in load handler
         free(f);
         filetuplearray_remove(jobctx->sj_files, 0);
     }
     filetuplearray_destroy(jobctx->sj_files);
-    // jobctx->sj_fd should be closed in load handler
     free(jobctx);
-}
-
-static
-int
-server_eval_select(struct server_jobctx *jobctx, struct op *op)
-{
-    return 0;
 }
 
 static
@@ -129,14 +123,18 @@ server_eval_load(struct server_jobctx *jobctx, struct op *op)
 
     // find the csv file descriptor for the load file name
     int csvfd = -1;
+    unsigned ix = -1;
     for (unsigned i = 0; i < filetuplearray_num(jobctx->sj_files); i++) {
         struct filetuple *ftuple = filetuplearray_get(jobctx->sj_files, i);
         if (strcmp(ftuple->ft_name, op->op_load.op_load_file) == 0) {
+            ix = i;
             csvfd = ftuple->ft_fd;
             break;
         }
     }
     assert(csvfd != -1);
+    assert(ix != -1);
+    filetuplearray_remove(jobctx->sj_files, ix);
     int result;
 
     // parse the csv
@@ -166,6 +164,85 @@ server_eval_load(struct server_jobctx *jobctx, struct op *op)
 
   cleanup_csv:
     csv_destroy(results);
+  done:
+    return result;
+}
+
+static
+int
+server_eval_select(struct server_jobctx *jobctx, struct op *op)
+{
+    assert(jobctx != NULL);
+    assert(op != NULL);
+    assert(op->op_type >= OP_SELECT_ALL_ASSIGN
+           && op->op_type <= OP_SELECT_RANGE);
+    int result;
+    struct column *col =
+            column_open(jobctx->sj_storage, op->op_select.op_sel_col);
+    if (col == NULL) {
+        result = -1;
+        goto done;
+    }
+    struct column_ids *ids = column_select(col, op);
+    if (ids == NULL) {
+        result = -1;
+        goto cleanup_col;
+    }
+
+    // If we have an assignment,
+    // find the variable in the vartuple array if it already exists
+    // otherwise create a new variable tuple
+    switch (op->op_type) {
+    case OP_SELECT_ALL_ASSIGN:
+    case OP_SELECT_RANGE_ASSIGN:
+    case OP_SELECT_VALUE_ASSIGN:
+        break;
+    case OP_SELECT_ALL:
+    case OP_SELECT_RANGE:
+    case OP_SELECT_VALUE:
+        goto cleanup_col;
+    default:
+        assert(0);
+        break;
+    }
+    bool should_cleanup_vtuple_on_err = false;
+    struct vartuple *vtuple = NULL;
+    for (unsigned i = 0; i < vartuplearray_num(jobctx->sj_env); i++) {
+        struct vartuple *v = vartuplearray_get(jobctx->sj_env, i);
+        if (strcmp(v->vt_var, op->op_select.op_sel_var) == 0) {
+            vtuple = v;
+            break;
+        }
+    }
+    if (vtuple == NULL) {
+        // we couldn't find the variable: we need to make a new vartuple
+        vtuple = malloc(sizeof(struct vartuple));
+        if (vtuple == NULL) {
+            result = -1;
+            goto cleanup_col;
+        }
+        should_cleanup_vtuple_on_err = true;
+        strcpy(vtuple->vt_var, op->op_select.op_sel_var);
+    } else {
+        // need to destroy the old column ids before reassigning
+        column_ids_destroy(vtuple->vt_column_ids);
+    }
+    vtuple->vt_column_ids = ids;
+    result = vartuplearray_add(jobctx->sj_env, vtuple, NULL);
+    if (result) {
+        goto cleanup_vartuple;
+    }
+
+    // success
+    result = 0;
+    goto cleanup_col;
+
+  cleanup_vartuple:
+    if (should_cleanup_vtuple_on_err) {
+        free(vtuple);
+    }
+  cleanup_col:
+    column_close(col);
   done:
     return result;
 }

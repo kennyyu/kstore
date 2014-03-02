@@ -381,6 +381,134 @@ column_close(struct column *col)
     lock_release(storage->st_lock);
 }
 
+static
+bool
+column_select_predicate(int candidateval, struct op *op)
+{
+    assert(op != NULL);
+    switch (op->op_type) {
+    case OP_SELECT_ALL:
+    case OP_SELECT_ALL_ASSIGN:
+        return true;
+    case OP_SELECT_RANGE:
+    case OP_SELECT_RANGE_ASSIGN:
+        return (candidateval >= op->op_select.op_sel_low)
+               && (candidateval <= op->op_select.op_sel_high);
+    case OP_SELECT_VALUE:
+    case OP_SELECT_VALUE_ASSIGN:
+        return (candidateval == op->op_select.op_sel_value);
+    default:
+        assert(0);
+        return false;
+    }
+}
+
+// PRECONDITION: MUST BE HOLDING COLUMN LOCK
+// This will mark the entries in the bitmap for the tuples that satisfy
+// the select predicate.
+static
+int
+column_select_unsorted(struct column *col, struct op *op,
+                       struct column_ids *cids)
+{
+    assert(col != NULL);
+    assert(op != NULL);
+    assert(cids != NULL);
+    assert(PAGESIZE % sizeof(struct column_entry_unsorted) == 0);
+
+    int result;
+    struct column_entry_unsorted colentrybuf[COLENTRY_UNSORTED_PER_PAGE];
+    uint64_t scanned = 0;
+    uint64_t ntuples = col->col_disk.cd_ntuples;
+    page_t page = FILE_FIRST_PAGE;
+    while (scanned < ntuples) {
+        result = file_read(col->col_file, page, colentrybuf);
+        if (result) {
+            goto done;
+        }
+        uint64_t toscan = MIN(ntuples - scanned, COLENTRY_UNSORTED_PER_PAGE);
+        for (unsigned i = 0; i < toscan; i++, scanned++) {
+            struct column_entry_unsorted entry = colentrybuf[i];
+            if (column_select_predicate(entry.ce_val, op)) {
+                bitmap_mark(cids->cid_bitmap, scanned);
+            }
+        }
+    }
+    assert(scanned == ntuples);
+    result = 0;
+    goto done;
+  done:
+    return result;
+}
+
+struct column_ids *
+column_select(struct column *col, struct op *op)
+{
+    assert(col != NULL);
+    assert(op != NULL);
+    lock_acquire(col->col_lock);
+
+    int result;
+    struct column_ids *cids = malloc(sizeof(struct column_ids));
+    if (cids == NULL) {
+        goto done;
+    }
+    cids->cid_bitmap = bitmap_create(col->col_disk.cd_ntuples);
+    if (cids->cid_bitmap == NULL) {
+        goto cleanup_malloc;
+    }
+    // select based on the storage type of the column
+    switch (col->col_disk.cd_stype) {
+    case STORAGE_UNSORTED:
+        result = column_select_unsorted(col, op, cids);
+        break;
+    case STORAGE_SORTED:
+    case STORAGE_BTREE:
+        assert(0);
+        break;
+    default:
+        assert(0);
+        break;
+    }
+    if (result) {
+        goto cleanup_bitmap;
+    }
+    // success
+    goto done;
+
+  cleanup_bitmap:
+    bitmap_destroy(cids->cid_bitmap);
+  cleanup_malloc:
+    free(cids);
+    cids = NULL;
+  done:
+    lock_release(col->col_lock);
+    return cids;
+}
+
+void
+column_ids_destroy(struct column_ids *cids)
+{
+    assert(cids != NULL);
+    bitmap_destroy(cids->cid_bitmap);
+    free(cids);
+}
+
+struct column_vals *
+column_fetch(struct column *col, struct column_ids *ids)
+{
+    // TODO
+    return NULL;
+}
+
+void
+column_vals_destroy(struct column_vals *vals)
+{
+    assert(vals != NULL);
+    free(vals->cval_vals);
+    free(vals);
+}
+
 int
 column_load(struct column *col, int *vals, uint64_t num)
 {

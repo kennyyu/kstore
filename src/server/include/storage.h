@@ -57,6 +57,8 @@ struct column_entry_unsorted {
     int ce_val;
 };
 
+#define COLENTRY_UNSORTED_PER_PAGE (PAGESIZE / sizeof(struct column_entry_unsorted))
+
 struct column_entry_sorted {
     int ce_val;
     uint32_t ce_index;
