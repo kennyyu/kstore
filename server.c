@@ -169,6 +169,19 @@ server_eval_load(struct server_jobctx *jobctx, struct op *op)
 }
 
 static
+struct vartuple *
+server_eval_get_var(struct vartuplearray *env, char *varname)
+{
+    for (unsigned i = 0; i < vartuplearray_num(env); i++) {
+        struct vartuple *v = vartuplearray_get(env, i);
+        if (strcmp(v->vt_var, varname) == 0) {
+            return v;
+        }
+    }
+    return NULL;
+}
+
+static
 int
 server_eval_select(struct server_jobctx *jobctx, struct op *op)
 {
@@ -206,14 +219,8 @@ server_eval_select(struct server_jobctx *jobctx, struct op *op)
         break;
     }
     bool should_cleanup_vtuple_on_err = false;
-    struct vartuple *vtuple = NULL;
-    for (unsigned i = 0; i < vartuplearray_num(jobctx->sj_env); i++) {
-        struct vartuple *v = vartuplearray_get(jobctx->sj_env, i);
-        if (strcmp(v->vt_var, op->op_select.op_sel_var) == 0) {
-            vtuple = v;
-            break;
-        }
-    }
+    struct vartuple *vtuple =
+            server_eval_get_var(jobctx->sj_env, op->op_select.op_sel_var);
     if (vtuple == NULL) {
         // we couldn't find the variable: we need to make a new vartuple
         vtuple = malloc(sizeof(struct vartuple));
@@ -251,7 +258,42 @@ static
 int
 server_eval_fetch(struct server_jobctx *jobctx, struct op *op)
 {
-    return 0;
+    assert(jobctx != NULL);
+    assert(op != NULL);
+    assert(op->op_type == OP_FETCH);
+    int result;
+    struct column *col =
+            column_open(jobctx->sj_storage, op->op_fetch.op_fetch_col);
+    if (col == NULL) {
+        result = -1;
+        goto done;
+    }
+    // find the variable representing the positions
+    struct vartuple *v =
+            server_eval_get_var(jobctx->sj_env, op->op_fetch.op_fetch_pos);
+    if (v == NULL) {
+        result = -1; // couldn't find var
+        goto cleanup_col;
+    }
+    // now that we have the ids, let's fetch the values for those ids
+    struct column_vals *vals = column_fetch(col, v->vt_column_ids);
+    if (vals == NULL) {
+        result = -1;
+        goto cleanup_col;
+    }
+    // now write the results back to the client
+    result = dbm_write_result(jobctx->sj_fd, vals);
+    if (result) {
+        goto cleanup_col;
+    }
+
+    // success
+    result = 0;
+    goto cleanup_col;
+  cleanup_col:
+    column_close(col);
+  done:
+    return result;
 }
 
 static

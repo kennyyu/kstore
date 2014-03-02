@@ -63,58 +63,79 @@ parse_stdin(int readfd, int writefd)
 
 static
 int
+client_handle_result(int readfd, int writefd, struct db_message *msg)
+{
+    (void) writefd;
+    assert(msg->dbm_type == DB_MESSAGE_FETCH_RESULT);
+    int *vals = NULL;
+    int nvals;
+    int result = dbm_read_result(readfd, msg, &vals, &nvals);
+    if (result) {
+        goto done;
+    }
+    assert(vals != NULL);
+    for (unsigned i = 0; i < nvals; i++) {
+        printf("%d\n", vals[i]);
+    }
+    free(vals);
+
+    result = 0;
+    goto done;
+
+  done:
+    return result;
+}
+
+static
+int
+client_handle_error(int readfd, int writefd, struct db_message *msg)
+{
+    (void) writefd;
+    assert(msg->dbm_type == DB_MESSAGE_ERROR);
+    char *error = NULL;
+    int result = dbm_read_error(readfd, msg, &error);
+    if (result) {
+        goto done;
+    }
+    assert(error != NULL);
+    printf("ERROR: %s\n", error);
+    free(error);
+
+    result = 0;
+    goto done;
+  done:
+    return result;
+}
+
+static
+int
 parse_sockfd(int readfd, int writefd)
 {
     (void) writefd;
     int result;
     struct db_message msg;
-    char *payload;
-    int *fetch;
     result = dbm_read(readfd, &msg);
     if (result) {
         goto done;
     }
     switch (msg.dbm_type) {
     case DB_MESSAGE_FETCH_RESULT:
-        // print all the fetched ints, one per line
-        assert(msg.dbm_len % 4 == 0);
-        payload = malloc(sizeof(char) * msg.dbm_len);
-        if (payload == NULL) {
-            result = ENOMEM;
-            goto done;
-        }
-        result = io_read(readfd, payload, msg.dbm_len);
-        if (result) {
-            goto cleanup_payload;
-        }
-        // TODO convert back from network byte order
-        fetch = (int *) payload;
-        for (unsigned i = 0; i < msg.dbm_len / 4; i++) {
-            printf("%d\n", fetch[i]);
-        }
+        result = client_handle_result(readfd, writefd, &msg);
         break;
     case DB_MESSAGE_ERROR:
-        // print the error message, dbm_len includes space for null character
-        payload = malloc(sizeof(char) * msg.dbm_len);
-        if (payload == NULL) {
-            result = ENOMEM;
-            goto done;
-        }
-        result = io_read(readfd, payload, msg.dbm_len);
-        if (result) {
-            goto cleanup_payload;
-        }
-        printf("%s\n", payload);
+        result = client_handle_error(readfd, writefd, &msg);
         break;
     default:
         assert(0);
         break;
     }
+    if (result) {
+        goto done;
+    }
 
     // success
     result = 0;
-  cleanup_payload:
-    free(payload);
+    goto done;
   done:
     return result;
 }

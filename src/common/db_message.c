@@ -214,3 +214,115 @@ dbm_write_file(int fd, struct op *op)
   done:
     return result;
 }
+
+int
+dbm_write_result(int fd, struct column_vals *vals)
+{
+    assert(vals != NULL);
+    int result;
+    struct db_message msg;
+    msg.dbm_type = DB_MESSAGE_FETCH_RESULT;
+    msg.dbm_magic = DB_MESSAGE_MAGIC;
+    msg.dbm_len = vals->cval_len * sizeof(int);
+    result = dbm_write(fd, &msg);
+    if (result) {
+        goto done;
+    }
+    for (unsigned i = 0; i < vals->cval_len; i++) {
+        uint32_t networkint = htonl(vals->cval_vals[i]);
+        result = io_write(fd, &networkint, sizeof(uint32_t));
+        if (result) {
+            goto done;
+        }
+    }
+    result = 0;
+    goto done;
+  done:
+    return result;
+}
+
+// the retvals must be freed
+int
+dbm_read_result(int fd, struct db_message *msg, int **retvals, int *retn)
+{
+    assert(retvals != NULL);
+    assert(retn != NULL);
+    assert(msg != NULL);
+    assert(msg->dbm_type == DB_MESSAGE_FETCH_RESULT);
+    int result;
+
+    uint32_t bytes = msg->dbm_len;
+    assert(bytes % sizeof(int) == 0);
+    int *vals = malloc(bytes);
+    if (vals == NULL) {
+        result = -1;
+        goto done;
+    }
+    unsigned nvals = bytes / (sizeof(int));
+    for (unsigned i = 0; i < nvals; i++) {
+        int networkint;
+        result = io_read(fd, &networkint, sizeof(int));
+        if (result) {
+            goto done;
+        }
+        vals[i] = ntohl(networkint);
+    }
+
+    // success
+    result = 0;
+    *retvals = vals;
+    *retn = nvals;
+    goto done;
+  done:
+    return result;
+}
+
+int
+dbm_write_error(int fd, char *error)
+{
+    assert(error != NULL);
+    uint32_t len = strlen(error) + 1; // +1 for '\0'
+    struct db_message msg;
+    msg.dbm_type = DB_MESSAGE_ERROR;
+    msg.dbm_magic = DB_MESSAGE_MAGIC;
+    msg.dbm_len = len;
+    int result = dbm_write(fd, &msg);
+    if (result) {
+        goto done;
+    }
+    result = io_write(fd, error, len);
+    if (result) {
+        goto done;
+    }
+    result = 0;
+    goto done;
+  done:
+    return result;
+}
+
+// retmsg must be freed
+int
+dbm_read_error(int fd, struct db_message *msg, char **retmsg)
+{
+    assert(msg != NULL);
+    assert(retmsg != NULL);
+    assert(msg->dbm_type == DB_MESSAGE_ERROR);
+
+    uint32_t len = msg->dbm_len;
+    int result;
+    char *error = malloc(len); // includes space for '\0'
+    if (error) {
+        result = -1;
+        goto done;
+    }
+    result = io_read(fd, error, len);
+    if (result) {
+        goto done;
+    }
+    // success
+    result = 0;
+    *retmsg = error;
+    goto done;
+  done:
+    return result;
+}

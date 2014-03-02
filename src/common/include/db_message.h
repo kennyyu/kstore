@@ -33,10 +33,10 @@ int dbm_read_file(int fd, char *filename, int *retfd);
 
 int dbm_write_result(int fd, struct column_vals *vals);
 // the retvals must be freed
-int dbm_read_result(int fd, int **retvals, int *retn);
+int dbm_read_result(int fd, struct db_message *msg, int **retvals, int *retn);
 
 int dbm_write_error(int fd, char *error);
 // retmsg must be freed
-int dbm_read_error(int fd, char **retmsg);
+int dbm_read_error(int fd, struct db_message *msg, char **retmsg);
 
 #endif
