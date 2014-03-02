@@ -411,6 +411,30 @@ column_select_predicate(int candidateval, struct op *op)
 // the select predicate.
 static
 int
+column_select_btree(struct column *col, struct op *op,
+                    struct column_ids *cids)
+{
+    // TODO
+    return 0;
+}
+
+// PRECONDITION: MUST BE HOLDING COLUMN LOCK
+// This will mark the entries in the bitmap for the tuples that satisfy
+// the select predicate.
+static
+int
+column_select_sorted(struct column *col, struct op *op,
+                     struct column_ids *cids)
+{
+    // TODO
+    return 0;
+}
+
+// PRECONDITION: MUST BE HOLDING COLUMN LOCK
+// This will mark the entries in the bitmap for the tuples that satisfy
+// the select predicate.
+static
+int
 column_select_unsorted(struct column *col, struct op *op,
                        struct column_ids *cids)
 {
@@ -467,8 +491,10 @@ column_select(struct column *col, struct op *op)
         result = column_select_unsorted(col, op, cids);
         break;
     case STORAGE_SORTED:
+        result = column_select_sorted(col, op, cids);
+        break;
     case STORAGE_BTREE:
-        assert(0);
+        result = column_select_btree(col, op, cids);
         break;
     default:
         assert(0);
@@ -499,9 +525,10 @@ column_ids_destroy(struct column_ids *cids)
 }
 
 // PRECONDITION: MUST BE HOLDING LOCK ON COLUMN
+static
 int
-column_fetch_unsorted(struct column *col, struct column_ids *ids,
-                      struct valarray *vals)
+column_fetch_base_data(struct column *col, struct column_ids *ids,
+                       struct valarray *vals)
 {
     int result;
     uint64_t ntuples = col->col_disk.cd_ntuples;
@@ -555,11 +582,10 @@ column_fetch(struct column *col, struct column_ids *ids)
     int result;
     switch (col->col_disk.cd_stype) {
     case STORAGE_UNSORTED:
-        result = column_fetch_unsorted(col, ids, vals);
-        break;
     case STORAGE_SORTED:
     case STORAGE_BTREE:
-        assert(0);
+        // we always use the base data to fetch the values
+        result = column_fetch_base_data(col, ids, vals);
         break;
     default:
         assert(0);
