@@ -1,5 +1,5 @@
-#ifndef _DB_MESSAGE_H_
-#define _DB_MESSAGE_H_
+#ifndef _RPC_H_
+#define _RPC_H_
 
 #include <stdint.h>
 #include "operators.h"
@@ -7,39 +7,45 @@
 
 #define DB_MESSAGE_MAGIC 0xDEADBEEF
 
-enum db_message_type {
-    DB_MESSAGE_QUERY,
-    DB_MESSAGE_FILE,
-    DB_MESSAGE_FETCH_RESULT,
-    DB_MESSAGE_ERROR,
-    DB_MESSAGE_TERMINATE,
+// RPC messages will be split into two parts:
+// Header
+//   specifies type and length of body
+// Body
+//   actual payload
+
+enum rpc_type {
+    RPC_QUERY,
+    RPC_FILE,
+    RPC_FETCH_RESULT,
+    RPC_ERROR,
+    RPC_TERMINATE,
 };
 
-struct db_message {
-    uint32_t dbm_type;
-    uint32_t dbm_magic;
-    uint64_t dbm_len;
+struct rpc_header {
+    uint32_t rpc_type;
+    uint32_t rpc_magic;
+    uint64_t rpc_len;
 };
 
-int dbm_write(int fd, struct db_message *message);
-int dbm_read(int fd, struct db_message *message);
+int rpc_write_header(int fd, struct rpc_header *message);
+int rpc_read_header(int fd, struct rpc_header *message);
 
-int dbm_write_query(int fd, struct op *op);
+int rpc_write_query(int fd, struct op *op);
 // the retop must be freed
-int dbm_read_query(int fd, struct db_message *msg, struct op **retop);
+int rpc_read_query(int fd, struct rpc_header *msg, struct op **retop);
 
-int dbm_write_file(int fd, struct op *op);
+int rpc_write_file(int fd, struct op *op);
 // the retfd must be closed
-int dbm_read_file(int fd, char *filename, int *retfd);
+int rpc_read_file(int fd, char *filename, int *retfd);
 
-int dbm_write_result(int fd, struct column_vals *vals);
+int rpc_write_fetch_result(int fd, struct column_vals *vals);
 // the retvals must be freed
-int dbm_read_result(int fd, struct db_message *msg, int **retvals, int *retn);
+int rpc_read_fetch_result(int fd, struct rpc_header *msg, int **retvals, int *retn);
 
-int dbm_write_error(int fd, char *error);
+int rpc_write_error(int fd, char *error);
 // retmsg must be freed
-int dbm_read_error(int fd, struct db_message *msg, char **retmsg);
+int rpc_read_error(int fd, struct rpc_header *msg, char **retmsg);
 
-int dbm_write_terminate(int fd);
+int rpc_write_terminate(int fd);
 
 #endif

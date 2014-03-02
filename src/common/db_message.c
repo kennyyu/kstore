@@ -43,17 +43,17 @@ hton64(const uint64_t input)
 }
 
 int
-dbm_write(int fd, struct db_message *message)
+rpc_write_header(int fd, struct rpc_header *message)
 {
     assert(message != NULL);
-    assert(message->dbm_magic == DB_MESSAGE_MAGIC);
+    assert(message->rpc_magic == DB_MESSAGE_MAGIC);
 
     int result;
-    struct db_message networkmsg;
-    networkmsg.dbm_type = htonl(message->dbm_type);
-    networkmsg.dbm_magic = htonl(message->dbm_magic);
-    networkmsg.dbm_len = hton64(message->dbm_len);
-    result = io_write(fd, (void *) &networkmsg, sizeof(struct db_message));
+    struct rpc_header networkmsg;
+    networkmsg.rpc_type = htonl(message->rpc_type);
+    networkmsg.rpc_magic = htonl(message->rpc_magic);
+    networkmsg.rpc_len = hton64(message->rpc_len);
+    result = io_write(fd, (void *) &networkmsg, sizeof(struct rpc_header));
     if (result) {
         goto done;
     }
@@ -63,50 +63,50 @@ dbm_write(int fd, struct db_message *message)
 }
 
 int
-dbm_write_terminate(int fd)
+rpc_write_terminate(int fd)
 {
-    struct db_message msg;
-    msg.dbm_type = DB_MESSAGE_TERMINATE;
-    msg.dbm_len = 0;
-    msg.dbm_magic = DB_MESSAGE_MAGIC;
-    return dbm_write(fd, &msg);
+    struct rpc_header msg;
+    msg.rpc_type = RPC_TERMINATE;
+    msg.rpc_len = 0;
+    msg.rpc_magic = DB_MESSAGE_MAGIC;
+    return rpc_write_header(fd, &msg);
 }
 
 int
-dbm_read(int fd, struct db_message *message)
+rpc_read_header(int fd, struct rpc_header *message)
 {
     assert(message != NULL);
 
     int result;
-    struct db_message networkmsg;
-    result = io_read(fd, (void *) &networkmsg, sizeof(struct db_message));
+    struct rpc_header networkmsg;
+    result = io_read(fd, (void *) &networkmsg, sizeof(struct rpc_header));
     if (result) {
         goto done;
     }
-    message->dbm_type = ntohl(networkmsg.dbm_type);
-    message->dbm_magic = ntohl(networkmsg.dbm_magic);
-    message->dbm_len = ntoh64(networkmsg.dbm_len);
-    assert(message->dbm_magic == DB_MESSAGE_MAGIC);
+    message->rpc_type = ntohl(networkmsg.rpc_type);
+    message->rpc_magic = ntohl(networkmsg.rpc_magic);
+    message->rpc_len = ntoh64(networkmsg.rpc_len);
+    assert(message->rpc_magic == DB_MESSAGE_MAGIC);
     result = 0;
   done:
     return result;
 }
 
 int
-dbm_write_query(int fd, struct op *op)
+rpc_write_query(int fd, struct op *op)
 {
     assert(op != NULL);
     int result;
     char *query = op_string(op);
-    struct db_message msg;
-    msg.dbm_type = DB_MESSAGE_QUERY;
-    msg.dbm_magic = DB_MESSAGE_MAGIC;
-    msg.dbm_len = strlen(query) + 1; // +1 for the null byte
-    result = dbm_write(fd, &msg);
+    struct rpc_header msg;
+    msg.rpc_type = RPC_QUERY;
+    msg.rpc_magic = DB_MESSAGE_MAGIC;
+    msg.rpc_len = strlen(query) + 1; // +1 for the null byte
+    result = rpc_write_header(fd, &msg);
     if (result) {
         goto cleanup_query;
     }
-    result = io_write(fd, query, msg.dbm_len);
+    result = io_write(fd, query, msg.rpc_len);
     if (result) {
         goto cleanup_query;
     }
@@ -119,19 +119,19 @@ dbm_write_query(int fd, struct op *op)
 }
 
 int
-dbm_read_query(int fd, struct db_message *msg, struct op **retop)
+rpc_read_query(int fd, struct rpc_header *msg, struct op **retop)
 {
     assert(retop != NULL);
     assert(msg != NULL);
     assert(retop != NULL);
-    assert(msg->dbm_type == DB_MESSAGE_QUERY);
+    assert(msg->rpc_type == RPC_QUERY);
 
     int result;
-    char *payload = malloc(sizeof(char) * msg->dbm_len); // includes null byte
+    char *payload = malloc(sizeof(char) * msg->rpc_len); // includes null byte
     if (payload == NULL) {
         goto done;
     }
-    result = io_read(fd, payload, msg->dbm_len);
+    result = io_read(fd, payload, msg->rpc_len);
     if (result) {
         goto cleanup_payload;
     }
@@ -152,13 +152,13 @@ dbm_read_query(int fd, struct db_message *msg, struct op **retop)
 }
 
 int
-dbm_read_file(int fd, char *filename, int *retfd)
+rpc_read_file(int fd, char *filename, int *retfd)
 {
     assert(retfd != NULL);
 
     int result;
-    struct db_message msg;
-    result = dbm_read(fd, &msg);
+    struct rpc_header msg;
+    result = rpc_read_header(fd, &msg);
     if (result) {
         goto done;
     }
@@ -167,7 +167,7 @@ dbm_read_file(int fd, char *filename, int *retfd)
         result = -1;
         goto done;
     }
-    result = io_copy(fd, copyfd, msg.dbm_len);
+    result = io_copy(fd, copyfd, msg.rpc_len);
     if (result) {
         goto cleanup_copyfd;
     }
@@ -189,27 +189,27 @@ dbm_read_file(int fd, char *filename, int *retfd)
 }
 
 int
-dbm_write_file(int fd, struct op *op)
+rpc_write_file(int fd, struct op *op)
 {
     assert(op != NULL);
     assert(op->op_type = OP_LOAD);
 
     int result;
-    struct db_message msg;
+    struct rpc_header msg;
     char *fname = op->op_load.op_load_file;
     int loadfd = open(fname, O_RDONLY);
     if (loadfd == -1) {
         result = -1;
         goto done;
     }
-    msg.dbm_type = DB_MESSAGE_FILE;
-    msg.dbm_magic = DB_MESSAGE_MAGIC;
-    msg.dbm_len = io_size(loadfd);
-    result = dbm_write(fd, &msg);
+    msg.rpc_type = RPC_FILE;
+    msg.rpc_magic = DB_MESSAGE_MAGIC;
+    msg.rpc_len = io_size(loadfd);
+    result = rpc_write_header(fd, &msg);
     if (result) {
         goto cleanup_loadfd;
     }
-    result = io_copy(loadfd, fd, msg.dbm_len);
+    result = io_copy(loadfd, fd, msg.rpc_len);
     if (result) {
         goto cleanup_loadfd;
     }
@@ -223,15 +223,15 @@ dbm_write_file(int fd, struct op *op)
 }
 
 int
-dbm_write_result(int fd, struct column_vals *vals)
+rpc_write_fetch_result(int fd, struct column_vals *vals)
 {
     assert(vals != NULL);
     int result;
-    struct db_message msg;
-    msg.dbm_type = DB_MESSAGE_FETCH_RESULT;
-    msg.dbm_magic = DB_MESSAGE_MAGIC;
-    msg.dbm_len = vals->cval_len * sizeof(int);
-    result = dbm_write(fd, &msg);
+    struct rpc_header msg;
+    msg.rpc_type = RPC_FETCH_RESULT;
+    msg.rpc_magic = DB_MESSAGE_MAGIC;
+    msg.rpc_len = vals->cval_len * sizeof(int);
+    result = rpc_write_header(fd, &msg);
     if (result) {
         goto done;
     }
@@ -250,15 +250,15 @@ dbm_write_result(int fd, struct column_vals *vals)
 
 // the retvals must be freed
 int
-dbm_read_result(int fd, struct db_message *msg, int **retvals, int *retn)
+rpc_read_fetch_result(int fd, struct rpc_header *msg, int **retvals, int *retn)
 {
     assert(retvals != NULL);
     assert(retn != NULL);
     assert(msg != NULL);
-    assert(msg->dbm_type == DB_MESSAGE_FETCH_RESULT);
+    assert(msg->rpc_type == RPC_FETCH_RESULT);
     int result;
 
-    uint32_t bytes = msg->dbm_len;
+    uint32_t bytes = msg->rpc_len;
     assert(bytes % sizeof(int) == 0);
     int *vals = malloc(bytes);
     if (vals == NULL) {
@@ -285,15 +285,15 @@ dbm_read_result(int fd, struct db_message *msg, int **retvals, int *retn)
 }
 
 int
-dbm_write_error(int fd, char *error)
+rpc_write_error(int fd, char *error)
 {
     assert(error != NULL);
     uint32_t len = strlen(error) + 1; // +1 for '\0'
-    struct db_message msg;
-    msg.dbm_type = DB_MESSAGE_ERROR;
-    msg.dbm_magic = DB_MESSAGE_MAGIC;
-    msg.dbm_len = len;
-    int result = dbm_write(fd, &msg);
+    struct rpc_header msg;
+    msg.rpc_type = RPC_ERROR;
+    msg.rpc_magic = DB_MESSAGE_MAGIC;
+    msg.rpc_len = len;
+    int result = rpc_write_header(fd, &msg);
     if (result) {
         goto done;
     }
@@ -309,13 +309,13 @@ dbm_write_error(int fd, char *error)
 
 // retmsg must be freed
 int
-dbm_read_error(int fd, struct db_message *msg, char **retmsg)
+rpc_read_error(int fd, struct rpc_header *msg, char **retmsg)
 {
     assert(msg != NULL);
     assert(retmsg != NULL);
-    assert(msg->dbm_type == DB_MESSAGE_ERROR);
+    assert(msg->rpc_type == RPC_ERROR);
 
-    uint32_t len = msg->dbm_len;
+    uint32_t len = msg->rpc_len;
     int result;
     char *error = malloc(len); // includes space for '\0'
     if (error) {

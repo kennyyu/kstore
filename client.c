@@ -42,12 +42,12 @@ parse_stdin(int readfd, int writefd)
     }
     for (unsigned i = 0; i < oparray_num(ops); i++) {
         struct op *op = oparray_get(ops, i);
-        result = dbm_write_query(writefd, op);
+        result = rpc_write_query(writefd, op);
         if (result) {
             goto cleanup_ops;
         }
         if (op->op_type == OP_LOAD) {
-            result = dbm_write_file(writefd, op);
+            result = rpc_write_file(writefd, op);
             if (result) {
                 goto cleanup_ops;
             }
@@ -63,13 +63,13 @@ parse_stdin(int readfd, int writefd)
 
 static
 int
-client_handle_result(int readfd, int writefd, struct db_message *msg)
+client_handle_result(int readfd, int writefd, struct rpc_header *msg)
 {
     (void) writefd;
-    assert(msg->dbm_type == DB_MESSAGE_FETCH_RESULT);
+    assert(msg->rpc_type == RPC_FETCH_RESULT);
     int *vals = NULL;
     int nvals;
-    int result = dbm_read_result(readfd, msg, &vals, &nvals);
+    int result = rpc_read_fetch_result(readfd, msg, &vals, &nvals);
     if (result) {
         goto done;
     }
@@ -88,12 +88,12 @@ client_handle_result(int readfd, int writefd, struct db_message *msg)
 
 static
 int
-client_handle_error(int readfd, int writefd, struct db_message *msg)
+client_handle_error(int readfd, int writefd, struct rpc_header *msg)
 {
     (void) writefd;
-    assert(msg->dbm_type == DB_MESSAGE_ERROR);
+    assert(msg->rpc_type == RPC_ERROR);
     char *error = NULL;
-    int result = dbm_read_error(readfd, msg, &error);
+    int result = rpc_read_error(readfd, msg, &error);
     if (result) {
         goto done;
     }
@@ -113,19 +113,19 @@ parse_sockfd(int readfd, int writefd)
 {
     (void) writefd;
     int result;
-    struct db_message msg;
-    result = dbm_read(readfd, &msg);
+    struct rpc_header msg;
+    result = rpc_read_header(readfd, &msg);
     if (result) {
         goto done;
     }
-    switch (msg.dbm_type) {
-    case DB_MESSAGE_TERMINATE:
+    switch (msg.rpc_type) {
+    case RPC_TERMINATE:
         result = -1;
         break;
-    case DB_MESSAGE_FETCH_RESULT:
+    case RPC_FETCH_RESULT:
         result = client_handle_result(readfd, writefd, &msg);
         break;
-    case DB_MESSAGE_ERROR:
+    case RPC_ERROR:
         result = client_handle_error(readfd, writefd, &msg);
         break;
     default:
@@ -201,7 +201,7 @@ main(void)
                 // if stdin is done, send a connection termination message
                 // to the server
                 read_stdin = false;
-                result = dbm_write_terminate(sockfd);
+                result = rpc_write_terminate(sockfd);
                 if (result) {
                     goto cleanup_sockfd;
                 }

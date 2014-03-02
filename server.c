@@ -282,7 +282,7 @@ server_eval_fetch(struct server_jobctx *jobctx, struct op *op)
         goto cleanup_col;
     }
     // now write the results back to the client
-    result = dbm_write_result(jobctx->sj_fd, vals);
+    result = rpc_write_fetch_result(jobctx->sj_fd, vals);
     if (result) {
         goto cleanup_col;
     }
@@ -378,19 +378,19 @@ server_routine(void *arg)
 
     while (1) {
         struct op *op;
-        struct db_message msg;
-        result = dbm_read(clientfd, &msg);
+        struct rpc_header msg;
+        result = rpc_read_header(clientfd, &msg);
         if (result) {
             goto done;
         }
-        switch (msg.dbm_type) {
-        case DB_MESSAGE_TERMINATE:
+        switch (msg.rpc_type) {
+        case RPC_TERMINATE:
             printf("received TERMINATE\n");
-            assert(dbm_write_terminate(clientfd) == 0);
+            assert(rpc_write_terminate(clientfd) == 0);
             goto done;
-        case DB_MESSAGE_QUERY:
+        case RPC_QUERY:
             // handle DB_MESSAGE_FILE here as well
-            result = dbm_read_query(clientfd, &msg, &op);
+            result = rpc_read_query(clientfd, &msg, &op);
             if (result) {
                 goto done;
             }
@@ -400,7 +400,7 @@ server_routine(void *arg)
                 sprintf(filenamebuf, "%s/jobid-%d.loadid-%d.tmp",
                         sarg->sj_storage->st_dbdir, jobid, loadid);
                 loadid++;
-                result = dbm_read_file(clientfd, filenamebuf, &copyfd);
+                result = rpc_read_file(clientfd, filenamebuf, &copyfd);
                 if (result) {
                     goto cleanup_op;
                 }
