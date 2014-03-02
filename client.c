@@ -174,11 +174,17 @@ main(void)
         goto cleanup_sockfd;
     }
 
-    while (1) {
+    bool read_stdin = true;
+    bool read_socket = true;
+    while (read_stdin || read_socket) {
         fd_set readfds;
         FD_ZERO(&readfds);
-        FD_SET(STDIN_FILENO, &readfds);
-        FD_SET(sockfd, &readfds);
+        if (read_stdin) {
+            FD_SET(STDIN_FILENO, &readfds);
+        }
+        if (read_socket) {
+            FD_SET(sockfd, &readfds);
+        }
         result = select(sockfd + 1, &readfds, NULL, NULL, NULL);
         if (result == -1) {
             perror("select");
@@ -186,18 +192,18 @@ main(void)
         }
 
         // if we get something from stdin, parse it and write it to the socket
-        if (FD_ISSET(STDIN_FILENO, &readfds)) {
+        if (read_stdin && FD_ISSET(STDIN_FILENO, &readfds)) {
             result = parse_stdin(STDIN_FILENO, sockfd);
             if (result) {
-                goto cleanup_sockfd;
+                read_stdin = false;
             }
         }
 
         // if we get something from the socket, parse it and write it to stdout
-        if (FD_ISSET(sockfd, &readfds)) {
+        if (read_socket && FD_ISSET(sockfd, &readfds)) {
             result = parse_sockfd(sockfd, STDOUT_FILENO);
             if (result) {
-                goto cleanup_sockfd;
+                read_socket = false;
             }
         }
     }

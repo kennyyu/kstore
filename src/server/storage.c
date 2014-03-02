@@ -21,6 +21,9 @@
 
 DEFARRAY(column, /* no inline */);
 
+DECLARRAY_BYTYPE(valarray, int);
+DEFARRAY_BYTYPE(valarray, int, /* no inline */);
+
 // create the directory if it doesn't exist, and init metadata file
 struct storage *
 storage_init(char *dbdir)
@@ -422,6 +425,7 @@ column_select_unsorted(struct column *col, struct op *op,
     uint64_t ntuples = col->col_disk.cd_ntuples;
     page_t page = FILE_FIRST_PAGE;
     while (scanned < ntuples) {
+        bzero(colentrybuf, PAGESIZE);
         result = file_read(col->col_file, page, colentrybuf);
         if (result) {
             goto done;
@@ -494,11 +498,104 @@ column_ids_destroy(struct column_ids *cids)
     free(cids);
 }
 
+// PRECONDITION: MUST BE HOLDING LOCK ON COLUMN
+int
+column_fetch_unsorted(struct column *col, struct column_ids *ids,
+                      struct valarray *vals)
+{
+    int result;
+    uint64_t ntuples = col->col_disk.cd_ntuples;
+    page_t curpage = 0;
+    struct column_entry_unsorted colentrybuf[COLENTRY_UNSORTED_PER_PAGE];
+    for (uint64_t i = 0; i < ntuples; i++) {
+        if (!bitmap_isset(ids->cid_bitmap, i)) {
+            continue;
+        }
+        page_t requestedpage =
+                FILE_FIRST_PAGE + (i / COLENTRY_UNSORTED_PER_PAGE);
+        assert(requestedpage != 0);
+        // if the requested page is not the current page in the buffer,
+        // read in that page and update the curpage
+        if (requestedpage != curpage) {
+            bzero(colentrybuf, PAGESIZE);
+            result = file_read(col->col_file, requestedpage, colentrybuf);
+            if (result) {
+                goto done;
+            }
+            curpage = requestedpage;
+        }
+        unsigned requestedindex = i % COLENTRY_UNSORTED_PER_PAGE;
+        int val = colentrybuf[requestedindex].ce_val;
+        result = valarray_add(vals, (void *) val, NULL);
+        if (result) {
+            goto done;
+        }
+    }
+    // success
+    result = 0;
+    goto done;
+  done:
+    return result;
+}
+
 struct column_vals *
 column_fetch(struct column *col, struct column_ids *ids)
 {
-    // TODO
-    return NULL;
+    assert(col != NULL);
+    assert(ids != NULL);
+    lock_acquire(col->col_lock);
+    uint64_t ntuples = col->col_disk.cd_ntuples;
+    assert(ntuples == bitmap_nbits(ids->cid_bitmap));
+
+    struct column_vals *cvals = NULL;
+    struct valarray *vals = valarray_create();
+    if (vals == NULL) {
+        goto done;
+    }
+    int result;
+    switch (col->col_disk.cd_stype) {
+    case STORAGE_UNSORTED:
+        result = column_fetch_unsorted(col, ids, vals);
+        break;
+    case STORAGE_SORTED:
+    case STORAGE_BTREE:
+        assert(0);
+        break;
+    default:
+        assert(0);
+        break;
+    }
+    if (result) {
+        goto cleanup_vals;
+    }
+
+    // memcpy the results from the resizable array into the pointer in this
+    // struct column_vals
+    cvals = malloc(sizeof(struct column_vals));
+    if (cvals == NULL) {
+        goto cleanup_vals;
+    }
+    cvals->cval_len = valarray_num(vals);
+    cvals->cval_vals = malloc(sizeof(int) * cvals->cval_len);
+    if (cvals->cval_vals == NULL) {
+        goto cleanup_malloc;
+    }
+    memcpy(cvals->cval_vals, vals->arr.v, sizeof(int) * cvals->cval_len);
+    result = 0;
+    goto cleanup_vals;
+
+  cleanup_malloc:
+    free(cvals);
+    cvals = NULL;
+  cleanup_vals:
+    while (valarray_num(vals) > 0) {
+        // no need to free the values because they're just ints
+        valarray_remove(vals, 0);
+    }
+    valarray_destroy(vals);
+  done:
+    lock_release(col->col_lock);
+    return cvals;
 }
 
 void
