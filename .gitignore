@@ -6,3 +6,5 @@ obj
 /client
 .settings
 testbin
+/db
+core
