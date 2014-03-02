@@ -319,24 +319,6 @@ server_eval_create(struct server_jobctx *jobctx, struct op *op)
     return result;
 }
 
-// TODO: need a struct server context
-// array of (name, select ids)
-// array of file names -> file descriptors
-// need file descriptor -> parse CSV
-// column names -> file descriptor for unsorted data
-// if type != unsorted-->build sorted projection in new file
-//
-// create:
-//   create new file
-// load:
-//   parse CSV
-//   write unsorted data into columns
-//   for each column, build sorted projection if needed
-// select:
-//   perform select, store ids in bitmap
-//   if ASSIGN, map varname -> ID
-// fetch:
-//   find varname -> lookup by ID
 static
 int
 server_eval(struct server_jobctx *jobctx, struct op *op)
