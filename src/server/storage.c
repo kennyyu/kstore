@@ -410,6 +410,7 @@ column_load(struct column *col, int *vals, uint64_t num)
         }
         curtuple += tuples_tocopy;
     }
+    col->col_disk.cd_ntuples += num;
 
     // to avoid deadlock, we must drop the column lock and
     // grab the lock on storage first
