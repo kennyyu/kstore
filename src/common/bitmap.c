@@ -107,6 +107,12 @@ bitmap_init(unsigned nbits, unsigned char *bytes)
     return b;
 }
 
+unsigned
+bitmap_nbits(struct bitmap *b)
+{
+    return b->nbits;
+}
+
 void *
 bitmap_getdata(struct bitmap *b) {
     return b->v;

@@ -57,6 +57,7 @@ void           bitmap_destroy(struct bitmap *);
 // bitmap_init will malloc space for it's own copy of bytes
 // so that bitmap_destroy may safely be called
 struct bitmap *bitmap_init(unsigned nbits, unsigned char *bytes);
+unsigned       bitmap_nbits(struct bitmap *);
 
 
 #endif /* _BITMAP_H_ */
