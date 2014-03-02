@@ -284,12 +284,14 @@ server_eval_fetch(struct server_jobctx *jobctx, struct op *op)
     // now write the results back to the client
     result = rpc_write_fetch_result(jobctx->sj_fd, vals);
     if (result) {
-        goto cleanup_col;
+        goto cleanup_vals;
     }
 
     // success
     result = 0;
-    goto cleanup_col;
+    goto cleanup_vals;
+  cleanup_vals:
+    column_vals_destroy(vals);
   cleanup_col:
     column_close(col);
   done:
@@ -311,7 +313,6 @@ server_eval_create(struct server_jobctx *jobctx, struct op *op)
     assert(jobctx != NULL);
     assert(op != NULL);
     assert(op->op_type == OP_CREATE);
-    printf("eval create %s\n", op->op_create.op_create_col);
     int result = storage_add_column(jobctx->sj_storage, op->op_create.op_create_col,
                                     op->op_create.op_create_stype);
     if (result) {
