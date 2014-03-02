@@ -613,6 +613,11 @@ column_load(struct column *col, int *vals, uint64_t num)
     assert(vals != NULL);
     int result;
     lock_acquire(col->col_lock);
+    // if we've already loaded this column, prevent a double load
+    if (col->col_disk.cd_ntuples > 0) {
+        result = 0;
+        goto cleanup_col_lock;
+    }
 
     int intbuf[PAGESIZE / sizeof(int)];
     uint64_t curtuple = 0;
