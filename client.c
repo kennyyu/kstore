@@ -13,7 +13,7 @@
 #include <sys/select.h>
 #include <sys/stat.h>
 #include <unistd.h>
-#include "src/common/include/db_message.h"
+#include "src/common/include/rpc.h"
 #include "src/common/include/operators.h"
 #include "src/common/include/parser.h"
 #include "src/common/include/io.h"

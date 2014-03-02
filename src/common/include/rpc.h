@@ -5,7 +5,7 @@
 #include "operators.h"
 #include "../../server/include/storage.h"
 
-#define DB_MESSAGE_MAGIC 0xDEADBEEF
+#define RPC_HEADER_MAGIC 0xDEADBEEF
 
 // RPC messages will be split into two parts:
 // Header

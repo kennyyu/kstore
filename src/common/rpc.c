@@ -9,7 +9,7 @@
 #include <stdarg.h>
 #include <string.h>
 #include <stdlib.h>
-#include "include/db_message.h"
+#include "include/rpc.h"
 #include "include/io.h"
 #include "include/operators.h"
 #include "include/parser.h"
@@ -46,7 +46,7 @@ int
 rpc_write_header(int fd, struct rpc_header *message)
 {
     assert(message != NULL);
-    assert(message->rpc_magic == DB_MESSAGE_MAGIC);
+    assert(message->rpc_magic == RPC_HEADER_MAGIC);
 
     int result;
     struct rpc_header networkmsg;
@@ -68,7 +68,7 @@ rpc_write_terminate(int fd)
     struct rpc_header msg;
     msg.rpc_type = RPC_TERMINATE;
     msg.rpc_len = 0;
-    msg.rpc_magic = DB_MESSAGE_MAGIC;
+    msg.rpc_magic = RPC_HEADER_MAGIC;
     return rpc_write_header(fd, &msg);
 }
 
@@ -86,7 +86,7 @@ rpc_read_header(int fd, struct rpc_header *message)
     message->rpc_type = ntohl(networkmsg.rpc_type);
     message->rpc_magic = ntohl(networkmsg.rpc_magic);
     message->rpc_len = ntoh64(networkmsg.rpc_len);
-    assert(message->rpc_magic == DB_MESSAGE_MAGIC);
+    assert(message->rpc_magic == RPC_HEADER_MAGIC);
     result = 0;
   done:
     return result;
@@ -100,7 +100,7 @@ rpc_write_query(int fd, struct op *op)
     char *query = op_string(op);
     struct rpc_header msg;
     msg.rpc_type = RPC_QUERY;
-    msg.rpc_magic = DB_MESSAGE_MAGIC;
+    msg.rpc_magic = RPC_HEADER_MAGIC;
     msg.rpc_len = strlen(query) + 1; // +1 for the null byte
     result = rpc_write_header(fd, &msg);
     if (result) {
@@ -198,7 +198,7 @@ rpc_write_file(int fd, struct op *op)
         goto done;
     }
     msg.rpc_type = RPC_FILE;
-    msg.rpc_magic = DB_MESSAGE_MAGIC;
+    msg.rpc_magic = RPC_HEADER_MAGIC;
     msg.rpc_len = io_size(loadfd);
     result = rpc_write_header(fd, &msg);
     if (result) {
@@ -224,7 +224,7 @@ rpc_write_fetch_result(int fd, struct column_vals *vals)
     int result;
     struct rpc_header msg;
     msg.rpc_type = RPC_FETCH_RESULT;
-    msg.rpc_magic = DB_MESSAGE_MAGIC;
+    msg.rpc_magic = RPC_HEADER_MAGIC;
     msg.rpc_len = vals->cval_len * sizeof(int);
     result = rpc_write_header(fd, &msg);
     if (result) {
@@ -286,7 +286,7 @@ rpc_write_error(int fd, char *error)
     uint32_t len = strlen(error) + 1; // +1 for '\0'
     struct rpc_header msg;
     msg.rpc_type = RPC_ERROR;
-    msg.rpc_magic = DB_MESSAGE_MAGIC;
+    msg.rpc_magic = RPC_HEADER_MAGIC;
     msg.rpc_len = len;
     int result = rpc_write_header(fd, &msg);
     if (result) {

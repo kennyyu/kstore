@@ -14,7 +14,7 @@
 #include <unistd.h>
 #include "src/common/include/io.h"
 #include "src/common/include/threadpool.h"
-#include "src/common/include/db_message.h"
+#include "src/common/include/rpc.h"
 #include "src/common/include/array.h"
 #include "src/common/include/csv.h"
 #include "src/server/include/storage.h"
