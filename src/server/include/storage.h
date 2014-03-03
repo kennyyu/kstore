@@ -2,6 +2,7 @@
 #define _STORAGE_H_
 
 #include <stdint.h>
+#include <stdbool.h>
 #include "../../common/include/operators.h"
 #include "../../common/include/bitmap.h"
 #include "../../common/include/array.h"
@@ -34,6 +35,7 @@ struct column {
     page_t col_page; // page in the storage file
     unsigned col_index; // index in the page in the storage file
     volatile unsigned col_opencount; // ref count on number of times open
+    volatile bool col_dirty; // tells us whether we need to synch the buffer
 };
 
 DECLARRAY(column);

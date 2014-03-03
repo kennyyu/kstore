@@ -320,6 +320,7 @@ column_open(struct storage *storage, char *colname)
     col->col_index = colindex;
     col->col_opencount = 1;
     col->col_storage = storage;
+    col->col_dirty = false;
 
     // finally, add this column to the array of open columns
     result = columnarray_add(storage->st_open_cols, col, NULL);
@@ -355,6 +356,8 @@ column_close(struct column *col)
     lock_acquire(storage->st_lock);
 
     // decrement the refcnt. if it reaches 0, destroy the column
+    // since we are the last thread to close it, then it is safe to
+    // read the contents of the struct without the lock
     bool should_destroy = false;
     lock_acquire(col->col_lock);
     col->col_opencount--;
@@ -364,6 +367,15 @@ column_close(struct column *col)
     lock_release(col->col_lock);
     if (!should_destroy) {
         goto done;
+    }
+
+    // synch any changes in the column if it is dirty
+    if (col->col_dirty) {
+        int result = storage_synch_column(storage, &col->col_disk,
+                                          col->col_page, col->col_index);
+        if (result) {
+            goto done;
+        }
     }
 
     // remove the column from the list of open columns
@@ -642,7 +654,7 @@ column_load(struct column *col, int *vals, uint64_t num)
     // if we've already loaded this column, prevent a double load
     if (col->col_disk.cd_ntuples > 0) {
         result = 0;
-        goto cleanup_col_lock;
+        goto done;
     }
 
     int intbuf[PAGESIZE / sizeof(int)];
@@ -657,34 +669,20 @@ column_load(struct column *col, int *vals, uint64_t num)
         page_t page;
         result = file_alloc_page(col->col_file, &page);
         if (result) {
-            goto cleanup_col_lock;
+            goto done;
         }
         result = file_write(col->col_file, page, intbuf);
         if (result) {
             file_free_page(col->col_file, page);
-            goto cleanup_col_lock;
+            goto done;
         }
         curtuple += tuples_tocopy;
     }
     col->col_disk.cd_ntuples += num;
-
-    // to avoid deadlock, we must drop the column lock and
-    // grab the lock on storage first
-    // synch updated column data to disk
-    struct storage *storage = col->col_storage;
-    lock_release(col->col_lock);
-
-    lock_acquire(storage->st_lock);
-    lock_acquire(col->col_lock);
-    result = storage_synch_column(storage, &col->col_disk,
-                                  col->col_page, col->col_index);
-    // return result
-    lock_release(col->col_lock);
-    lock_release(storage->st_lock);
+    col->col_dirty = true;
     goto done;
 
-  cleanup_col_lock:
-    lock_release(col->col_lock);
   done:
+    lock_release(col->col_lock);
     return result;
 }
