@@ -31,7 +31,7 @@ struct column {
     struct storage *col_storage;
     struct column_on_disk col_disk;
     struct file *col_file;
-    struct lock *col_lock;
+    struct rwlock *col_rwlock;
     page_t col_page; // page in the storage file
     unsigned col_index; // index in the page in the storage file
     volatile unsigned col_opencount; // ref count on number of times open

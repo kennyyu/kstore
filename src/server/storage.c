@@ -150,13 +150,13 @@ storage_find_column_open(struct storage *storage, char *colname,
 
     for (unsigned i = 0; i < columnarray_num(storage->st_open_cols); i++) {
         struct column *col = columnarray_get(storage->st_open_cols, i);
-        lock_acquire(col->col_lock);
+        rwlock_acquire_read(col->col_rwlock);
         if (strcmp(col->col_disk.cd_col_name, colname) == 0) {
             *retcol = col;
-            lock_release(col->col_lock);
+            rwlock_release(col->col_rwlock);
             return true;
         }
-        lock_release(col->col_lock);
+        rwlock_release(col->col_rwlock);
     }
     return false;
 }
@@ -276,9 +276,9 @@ column_open(struct storage *storage, char *colname)
     // if it is, increment the ref count and return it
     bool openfound = storage_find_column_open(storage, colname, &col);
     if (openfound) {
-        lock_acquire(col->col_lock);
+        rwlock_acquire_write(col->col_rwlock);
         col->col_opencount++;
-        lock_release(col->col_lock);
+        rwlock_release(col->col_rwlock);
         goto done;
     }
 
@@ -312,8 +312,8 @@ column_open(struct storage *storage, char *colname)
     }
 
     // allocate the lock to protect the column
-    col->col_lock = lock_create();
-    if (col->col_lock == NULL) {
+    col->col_rwlock = rwlock_create();
+    if (col->col_rwlock == NULL) {
         goto cleanup_file;
     }
     col->col_page = colpage;
@@ -330,7 +330,7 @@ column_open(struct storage *storage, char *colname)
     goto done;
 
   cleanup_lock:
-    lock_destroy(col->col_lock);
+    rwlock_destroy(col->col_rwlock);
   cleanup_file:
     file_close(col->col_file);
   cleanup_malloc:
@@ -349,9 +349,9 @@ column_close(struct column *col)
     // to prevent an open and close happening at the same time for this
     // column, we grab the lock on storage first
     // to avoid deadlock, we grab the storage lock first
-    lock_acquire(col->col_lock);
+    rwlock_acquire_read(col->col_rwlock);
     struct storage *storage = col->col_storage;
-    lock_release(col->col_lock);
+    rwlock_release(col->col_rwlock);
     assert(storage != NULL);
     lock_acquire(storage->st_lock);
 
@@ -359,12 +359,12 @@ column_close(struct column *col)
     // since we are the last thread to close it, then it is safe to
     // read the contents of the struct without the lock
     bool should_destroy = false;
-    lock_acquire(col->col_lock);
+    rwlock_acquire_write(col->col_rwlock);
     col->col_opencount--;
     if (col->col_opencount == 0) {
         should_destroy = true;
     }
-    lock_release(col->col_lock);
+    rwlock_release(col->col_rwlock);
     if (!should_destroy) {
         goto done;
     }
@@ -388,7 +388,7 @@ column_close(struct column *col)
         }
     }
     assert(columnarray_num(storage->st_open_cols) == listlen - 1);
-    lock_destroy(col->col_lock);
+    rwlock_destroy(col->col_rwlock);
     file_close(col->col_file);
     free(col);
 
@@ -486,7 +486,7 @@ column_select(struct column *col, struct op *op)
 {
     assert(col != NULL);
     assert(op != NULL);
-    lock_acquire(col->col_lock);
+    rwlock_acquire_read(col->col_rwlock);
 
     int result;
     struct column_ids *cids = malloc(sizeof(struct column_ids));
@@ -524,7 +524,7 @@ column_select(struct column *col, struct op *op)
     free(cids);
     cids = NULL;
   done:
-    lock_release(col->col_lock);
+    rwlock_release(col->col_rwlock);
     return cids;
 }
 
@@ -582,7 +582,7 @@ column_fetch(struct column *col, struct column_ids *ids)
 {
     assert(col != NULL);
     assert(ids != NULL);
-    lock_acquire(col->col_lock);
+    rwlock_acquire_read(col->col_rwlock);
     uint64_t ntuples = col->col_disk.cd_ntuples;
     assert(ntuples == bitmap_nbits(ids->cid_bitmap));
 
@@ -632,7 +632,7 @@ column_fetch(struct column *col, struct column_ids *ids)
     }
     valarray_destroy(vals);
   done:
-    lock_release(col->col_lock);
+    rwlock_release(col->col_rwlock);
     return cvals;
 }
 
@@ -650,7 +650,7 @@ column_load(struct column *col, int *vals, uint64_t num)
     assert(col != NULL);
     assert(vals != NULL);
     int result;
-    lock_acquire(col->col_lock);
+    rwlock_acquire_write(col->col_rwlock);
     // if we've already loaded this column, prevent a double load
     if (col->col_disk.cd_ntuples > 0) {
         result = 0;
@@ -683,6 +683,6 @@ column_load(struct column *col, int *vals, uint64_t num)
     goto done;
 
   done:
-    lock_release(col->col_lock);
+    rwlock_release(col->col_rwlock);
     return result;
 }
