@@ -148,3 +148,56 @@ cv_signal(struct cv *cv)
     assert(cv != NULL);
     assert(pthread_cond_signal(&cv->cv_cond) == 0);
 }
+
+struct rwlock {
+    pthread_rwlock_t rwlk_lock;
+};
+
+struct rwlock *
+rwlock_create(void)
+{
+    struct rwlock *rwlk = malloc(sizeof(struct rwlock));
+    if (rwlk == NULL) {
+        goto done;
+    }
+    int result = pthread_rwlock_init(&rwlk->rwlk_lock, NULL);
+    if (result) {
+        goto cleanup_malloc;
+    }
+    result = 0;
+    goto done;
+  cleanup_malloc:
+    free(rwlk);
+    rwlk = NULL;
+  done:
+    return rwlk;
+}
+
+void
+rwlock_destroy(struct rwlock *rwlk)
+{
+    assert(rwlk != NULL);
+    assert(pthread_rwlock_destroy(&rwlk->rwlk_lock) == 0);
+    free(rwlk);
+}
+
+void
+rwlock_acquire_read(struct rwlock *rwlk)
+{
+    assert(rwlk != NULL);
+    assert(pthread_rwlock_rdlock(&rwlk->rwlk_lock) == 0);
+}
+
+void
+rwlock_acquire_write(struct rwlock *rwlk)
+{
+    assert(rwlk != NULL);
+    assert(pthread_rwlock_wrlock(&rwlk->rwlk_lock) == 0);
+}
+
+void
+rwlock_release(struct rwlock *rwlk)
+{
+    assert(rwlk != NULL);
+    assert(pthread_rwlock_unlock(&rwlk->rwlk_lock) == 0);
+}

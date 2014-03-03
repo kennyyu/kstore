@@ -24,4 +24,11 @@ void cv_wait(struct cv *cv, struct lock *lk);
 void cv_broadcast(struct cv *cv);
 void cv_signal(struct cv *cv);
 
+struct rwlock;
+struct rwlock *rwlock_create(void);
+void rwlock_destroy(struct rwlock *rwlk);
+void rwlock_acquire_read(struct rwlock *rwlk);
+void rwlock_acquire_write(struct rwlock *rwlk);
+void rwlock_release(struct rwlock *rwlk);
+
 #endif
