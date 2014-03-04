@@ -215,6 +215,12 @@ storage_add_column(struct storage *storage, char *colname,
     // if we reach here, then we could not find our column in the file
     // try to insert our column into a free page, otherwise we'll need to
     // extend the file with a new page
+    struct column_on_disk newcol;
+    bzero(&newcol, sizeof(struct column_on_disk));
+    strcpy(newcol.cd_col_name, colname);
+    newcol.cd_ntuples = 0;
+    newcol.cd_magic = COLUMN_TAKEN;
+    newcol.cd_stype = stype;
 
     // create a file to store the column data
     char filenamebuf[56];
@@ -224,14 +230,26 @@ storage_add_column(struct storage *storage, char *colname,
         result = -1;
         goto done;
     }
-
-    struct column_on_disk newcol;
-    bzero(&newcol, sizeof(struct column_on_disk));
-    strcpy(newcol.cd_col_name, colname);
-    newcol.cd_ntuples = 0;
-    newcol.cd_magic = COLUMN_TAKEN;
-    newcol.cd_stype = stype;
+    file_close(colfile);
     sprintf(newcol.cd_base_file, "%s.column", colname);
+
+    // create a file to store the index data
+    char indexnamebuf[56];
+    if (stype == STORAGE_BTREE || stype == STORAGE_SORTED) {
+        if (stype == STORAGE_BTREE) {
+            sprintf(indexnamebuf, "%s/%s.btree", storage->st_dbdir, colname);
+            sprintf(newcol.cd_index_file, "%s.btree", colname);
+        } else if (stype == STORAGE_SORTED) {
+            sprintf(indexnamebuf, "%s/%s.sorted", storage->st_dbdir, colname);
+            sprintf(newcol.cd_index_file, "%s.sorted", colname);
+        }
+        struct file *colindexfile = file_open(indexnamebuf);
+        if (colindexfile == NULL) {
+            result = -1;
+            goto cleanup_file;
+        }
+        file_close(colindexfile);
+    }
 
     // if we couldn't find a free slot earlier, we need to extend
     // the storage metadata file
@@ -256,6 +274,9 @@ storage_add_column(struct storage *storage, char *colname,
         file_free_page(storage->st_file, colpage);
     }
   cleanup_file:
+    if (stype == STORAGE_BTREE || stype == STORAGE_SORTED) {
+        assert(remove(indexnamebuf) == 0);
+    }
     assert(remove(filenamebuf) == 0);
   done:
     lock_release(storage->st_lock);
@@ -313,12 +334,10 @@ column_open(struct storage *storage, char *colname)
     }
 
     // open the index file for the column if it exists
-    // only columns that have btree and sorted storage with > 0 tuples
-    // have indices built
+    // only columns that have btree and sorted storage
     col->col_index_file = NULL;
     if ((col->col_disk.cd_stype == STORAGE_BTREE
-         || col->col_disk.cd_stype == STORAGE_SORTED)
-        && col->col_disk.cd_ntuples > 0) {
+         || col->col_disk.cd_stype == STORAGE_SORTED)) {
         sprintf(filenamebuf, "%s/%s", storage->st_dbdir,
                 col->col_disk.cd_index_file);
         col->col_index_file = file_open(filenamebuf);
@@ -451,8 +470,8 @@ column_select_btree(struct column *col, struct op *op,
 
 static
 int
-column_sorted_binary_search(struct column *col, int val,
-                            page_t *retpage, unsigned *retindex)
+column_sorted_search(struct column *col, int val,
+                     page_t *retpage, unsigned *retindex)
 {
     return 0;
 }
@@ -465,7 +484,7 @@ int
 column_select_sorted(struct column *col, struct op *op,
                      struct column_ids *cids)
 {
-    (void) column_sorted_binary_search;
+    (void) column_sorted_search;
     /*
      * TODO: need to perform multiple binary searches for low and high/val
      * then scan all the tuples in between
@@ -559,7 +578,9 @@ column_select(struct column *col, struct op *op)
         result = column_select_unsorted(col, op, cids);
         break;
     case STORAGE_SORTED:
-        result = column_select_sorted(col, op, cids);
+        //result = column_select_sorted(col, op, cids);
+        (void) column_select_sorted; // TODO
+        result = column_select_unsorted(col, op, cids);
         break;
     case STORAGE_BTREE:
         result = column_select_btree(col, op, cids);
@@ -702,7 +723,16 @@ column_vals_destroy(struct column_vals *vals)
 
 static
 int
-column_load_into_file(struct file *f, int *vals, uint64_t num)
+column_entry_sorted_compare(const void *a, const void *b)
+{
+    struct column_entry_sorted *aent = (struct column_entry_sorted *) a;
+    struct column_entry_sorted *bent = (struct column_entry_sorted *) b;
+    return aent->ce_val - bent->ce_val;
+}
+
+static
+int
+column_load_unsorted(struct file *f, int *vals, uint64_t num)
 {
     int result;
     int intbuf[PAGESIZE / sizeof(int)];
@@ -730,6 +760,57 @@ column_load_into_file(struct file *f, int *vals, uint64_t num)
     return result;
 }
 
+static
+int
+column_load_index_sorted(struct file *f, int *vals, uint64_t num)
+{
+    assert(f != NULL);
+    assert(vals != NULL);
+
+    int result;
+    // create the entries in memory and sort them
+    struct column_entry_sorted *entries =
+            malloc(num * sizeof(struct column_entry_sorted));
+    if (entries == NULL) {
+        goto done;
+    }
+    for (uint64_t i = 0; i < num; i++) {
+        entries[i].ce_val = vals[i];
+        entries[i].ce_index = i;
+    }
+    qsort(entries, num, sizeof(struct column_entry_sorted),
+          column_entry_sorted_compare);
+
+    // write the entries out to disk, one page at a time
+    struct column_entry_sorted colentrybuf[COLENTRY_SORTED_PER_PAGE];
+    uint64_t curtuple = 0;
+    while (curtuple < num) {
+        uint64_t tuples_tocopy = num - curtuple;
+        // avoid overflow
+        size_t bytes_tocopy = sizeof(struct column_entry_sorted)
+                * (MIN(COLENTRY_SORTED_PER_PAGE, tuples_tocopy));
+        bzero(colentrybuf, PAGESIZE);
+        memcpy(colentrybuf, entries + curtuple, bytes_tocopy);
+        page_t page;
+        result = file_alloc_page(f, &page);
+        if (result) {
+            goto cleanup_malloc;
+        }
+        result = file_write(f, page, colentrybuf);
+        if (result) {
+            file_free_page(f, page);
+            goto cleanup_malloc;
+        }
+        curtuple += tuples_tocopy;
+    }
+    result = 0;
+    goto cleanup_malloc;
+  cleanup_malloc:
+    free(entries);
+  done:
+    return result;
+}
+
 int
 column_load(struct column *col, int *vals, uint64_t num)
 {
@@ -744,7 +825,20 @@ column_load(struct column *col, int *vals, uint64_t num)
     }
 
     // TODO: also create index file
-    result = column_load_into_file(col->col_base_file, vals, num);
+    result = column_load_unsorted(col->col_base_file, vals, num);
+    switch (col->col_disk.cd_stype) {
+    case STORAGE_BTREE:
+        assert(0); //unimplemented
+        break;
+    case STORAGE_SORTED:
+        result = column_load_index_sorted(col->col_index_file, vals, num);
+        break;
+    case STORAGE_UNSORTED:
+        break;
+    default:
+        assert(0);
+        break;
+    }
     col->col_disk.cd_ntuples += num;
     col->col_dirty = true;
     goto done;
