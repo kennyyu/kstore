@@ -230,7 +230,7 @@ storage_add_column(struct storage *storage, char *colname,
     newcol.cd_ntuples = 0;
     newcol.cd_magic = COLUMN_TAKEN;
     newcol.cd_stype = stype;
-    sprintf(newcol.cd_file_name, "%s.column", colname);
+    sprintf(newcol.cd_base_file, "%s.column", colname);
 
     // if we couldn't find a free slot earlier, we need to extend
     // the storage metadata file
@@ -305,9 +305,9 @@ column_open(struct storage *storage, char *colname)
     // open the file for the column
     char filenamebuf[128];
     sprintf(filenamebuf, "%s/%s", storage->st_dbdir,
-            col->col_disk.cd_file_name);
-    col->col_file = file_open(filenamebuf);
-    if (col->col_file == NULL) {
+            col->col_disk.cd_base_file);
+    col->col_base_file = file_open(filenamebuf);
+    if (col->col_base_file == NULL) {
         goto cleanup_malloc;
     }
 
@@ -332,7 +332,7 @@ column_open(struct storage *storage, char *colname)
   cleanup_lock:
     rwlock_destroy(col->col_rwlock);
   cleanup_file:
-    file_close(col->col_file);
+    file_close(col->col_base_file);
   cleanup_malloc:
     free(col);
     col = NULL;
@@ -389,7 +389,7 @@ column_close(struct column *col)
     }
     assert(columnarray_num(storage->st_open_cols) == listlen - 1);
     rwlock_destroy(col->col_rwlock);
-    file_close(col->col_file);
+    file_close(col->col_base_file);
     free(col);
 
   done:
@@ -499,7 +499,7 @@ column_select_unsorted(struct column *col, struct op *op,
     page_t page = FILE_FIRST_PAGE;
     while (scanned < ntuples) {
         bzero(colentrybuf, PAGESIZE);
-        result = file_read(col->col_file, page, colentrybuf);
+        result = file_read(col->col_base_file, page, colentrybuf);
         if (result) {
             goto done;
         }
@@ -594,7 +594,7 @@ column_fetch_base_data(struct column *col, struct column_ids *ids,
         // read in that page and update the curpage
         if (requestedpage != curpage) {
             bzero(colentrybuf, PAGESIZE);
-            result = file_read(col->col_file, requestedpage, colentrybuf);
+            result = file_read(col->col_base_file, requestedpage, colentrybuf);
             if (result) {
                 goto done;
             }
@@ -725,7 +725,7 @@ column_load(struct column *col, int *vals, uint64_t num)
     }
 
     // TODO: also create index file
-    result = column_load_into_file(col->col_file, vals, num);
+    result = column_load_into_file(col->col_base_file, vals, num);
     col->col_disk.cd_ntuples += num;
     col->col_dirty = true;
     goto done;

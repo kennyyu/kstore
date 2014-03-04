@@ -20,8 +20,8 @@ struct column_on_disk {
     uint64_t cd_ntuples; // number of tuples in this column
     uint32_t cd_stype; // enum storage_type
     uint32_t cd_magic; // magic value for debugging
-    char cd_file_name[56]; // file where data is stored, does not include dbdir
-    char cd_index_name[56]; // file where index is stored, does not include dbdir
+    char cd_base_file[56]; // file where data is stored, does not include dbdir
+    char cd_index_file[56]; // file where index is stored, does not include dbdir
 };
 
 #define COLUMNS_PER_PAGE (PAGESIZE / sizeof(struct column_on_disk))
@@ -30,7 +30,7 @@ struct column_on_disk {
 struct column {
     struct storage *col_storage;
     struct column_on_disk col_disk;
-    struct file *col_file;
+    struct file *col_base_file;
     struct rwlock *col_rwlock;
     page_t col_page; // page in the storage file
     unsigned col_index; // index in the page in the storage file
