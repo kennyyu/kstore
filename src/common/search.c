@@ -1,6 +1,12 @@
 #include <assert.h>
 #include "include/search.h"
 
+int
+int_compare(const void *a, const void *b)
+{
+    return (*((int *) a) - *((int *) b));
+}
+
 unsigned
 binary_search(void *x, void *vals, unsigned nvals, size_t size,
               int (*compare)(const void *a, const void *b))

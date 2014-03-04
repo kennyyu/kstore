@@ -10,4 +10,7 @@
 unsigned binary_search(void *x, void *vals, unsigned nvals, size_t size,
                        int (*compare)(const void *a, const void *b));
 
+// Example comparison function for ints
+int int_compare(const void *a, const void *b);
+
 #endif

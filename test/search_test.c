@@ -3,10 +3,6 @@
 #include <stdio.h>
 #include "../src/common/include/search.h"
 
-static int int_compare(const void *a, const void *b) {
-    return (*((int *) a) - *((int *) b));
-}
-
 void testempty(void) {
     int arr[0];
     int val = 5;
