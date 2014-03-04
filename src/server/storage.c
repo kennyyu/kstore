@@ -430,6 +430,14 @@ column_select_btree(struct column *col, struct op *op,
     return 0;
 }
 
+static
+int
+column_sorted_binary_search(struct column *col, int val,
+                            page_t *retpage, unsigned *retindex)
+{
+    return 0;
+}
+
 // PRECONDITION: MUST BE HOLDING COLUMN LOCK
 // This will mark the entries in the bitmap for the tuples that satisfy
 // the select predicate.
@@ -438,16 +446,36 @@ int
 column_select_sorted(struct column *col, struct op *op,
                      struct column_ids *cids)
 {
+    (void) column_sorted_binary_search;
     /*
+     * TODO: need to perform multiple binary searches for low and high/val
+     * then scan all the tuples in between
     assert(col != NULL);
     assert(op != NULL);
     assert(cids != NULL);
     assert(PAGESIZE % sizeof(struct column_entry_sorted) == 0);
 
     int result;
+    struct column_entry_sorted target;
+    target.ce_val =
     struct column_entry_sorted colentrybuf[COLENTRY_SORTED_PER_PAGE];
     uint64_t ntuples = col->col_disk.cd_ntuples;
-    int low = */
+    page_t page_l = FILE_FIRST_PAGE;
+    page_t page_r = FILE_FIRST_PAGE + (ntuples / COLENTRY_SORTED_PER_PAGE);
+    while (page_l < page_r) {
+        page_t page_m = page_l + (page_r - page_l) / 2;
+        bzero(colentrybuf, PAGESIZE);
+        result = file_read(col->col_file, page_m, colentrybuf);
+        if (result) {
+            goto done;
+        }
+        unsigned index = binary_search()
+    }
+
+    result = 0;
+  done:
+    return result;
+  */
     return 0;
 }
 
@@ -653,6 +681,36 @@ column_vals_destroy(struct column_vals *vals)
     free(vals);
 }
 
+static
+int
+column_load_into_file(struct file *f, int *vals, uint64_t num)
+{
+    int result;
+    int intbuf[PAGESIZE / sizeof(int)];
+    uint64_t curtuple = 0;
+    while (curtuple < num) {
+        uint64_t tuples_tocopy = num - curtuple;
+        // avoid overflow
+        size_t bytes_tocopy =
+                sizeof(int) * (MIN(PAGESIZE / sizeof(int), tuples_tocopy));
+        bzero(intbuf, PAGESIZE);
+        memcpy(intbuf, vals + curtuple, bytes_tocopy);
+        page_t page;
+        result = file_alloc_page(f, &page);
+        if (result) {
+            goto done;
+        }
+        result = file_write(f, page, intbuf);
+        if (result) {
+            file_free_page(f, page);
+            goto done;
+        }
+        curtuple += tuples_tocopy;
+    }
+  done:
+    return result;
+}
+
 int
 column_load(struct column *col, int *vals, uint64_t num)
 {
@@ -666,27 +724,8 @@ column_load(struct column *col, int *vals, uint64_t num)
         goto done;
     }
 
-    int intbuf[PAGESIZE / sizeof(int)];
-    uint64_t curtuple = 0;
-    while (curtuple < num) {
-        uint64_t tuples_tocopy = num - curtuple;
-        // avoid overflow
-        size_t bytes_tocopy =
-                sizeof(int) * (MIN(PAGESIZE / sizeof(int), tuples_tocopy));
-        bzero(intbuf, PAGESIZE);
-        memcpy(intbuf, vals + curtuple, bytes_tocopy);
-        page_t page;
-        result = file_alloc_page(col->col_file, &page);
-        if (result) {
-            goto done;
-        }
-        result = file_write(col->col_file, page, intbuf);
-        if (result) {
-            file_free_page(col->col_file, page);
-            goto done;
-        }
-        curtuple += tuples_tocopy;
-    }
+    // TODO: also create index file
+    result = column_load_into_file(col->col_file, vals, num);
     col->col_disk.cd_ntuples += num;
     col->col_dirty = true;
     goto done;
