@@ -3,7 +3,7 @@
 
 unsigned
 binary_search(void *x, void *vals, unsigned nvals, size_t size,
-              int (*compare)(void *a, void *b))
+              int (*compare)(const void *a, const void *b))
 {
     unsigned l = 0;
     unsigned r = nvals;

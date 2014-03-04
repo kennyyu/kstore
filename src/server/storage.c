@@ -14,6 +14,7 @@
 #include "../common/include/operators.h"
 #include "../common/include/array.h"
 #include "../common/include/synch.h"
+#include "../common/include/search.h"
 
 #define METADATA_FILENAME "metadata"
 
@@ -470,10 +471,83 @@ column_select_btree(struct column *col, struct op *op,
 
 static
 int
+column_entry_sorted_compare(const void *a, const void *b)
+{
+    struct column_entry_sorted *aent = (struct column_entry_sorted *) a;
+    struct column_entry_sorted *bent = (struct column_entry_sorted *) b;
+    return aent->ce_val - bent->ce_val;
+}
+
+static
+int
 column_sorted_search(struct column *col, int val,
                      page_t *retpage, unsigned *retindex)
 {
-    return 0;
+    assert(col != NULL);
+    assert(retpage != NULL);
+    assert(retindex != NULL);
+
+    // we perform a binary search on the pages. for each page we read in,
+    // we perform a binary search on the tuples in that page to get
+    // a lower bound.
+    int result;
+    struct column_entry_sorted colentrybuf[COLENTRY_SORTED_PER_PAGE];
+    uint64_t ntuples = col->col_disk.cd_ntuples;
+    page_t pl = FILE_FIRST_PAGE;
+    // take the ceiling
+    page_t plast = FILE_FIRST_PAGE + 1 + ((ntuples - 1) / COLENTRY_SORTED_PER_PAGE);
+    page_t pr = plast;
+    unsigned index = 0;
+    while (pl < pr) {
+        page_t pm = pl + (pr - pl) / 2;
+        bzero(colentrybuf, PAGESIZE);
+        result = file_read(col->col_index_file, pm, colentrybuf);
+        if (result) {
+            goto done;
+        }
+        struct column_entry_sorted target;
+        target.ce_val = val;
+        uint64_t ntuples_in_page = (pm < plast) ? COLENTRY_SORTED_PER_PAGE :
+                ntuples % COLENTRY_SORTED_PER_PAGE;
+        index = binary_search(&target, colentrybuf, ntuples_in_page,
+                              sizeof(struct column_entry_sorted),
+                              column_entry_sorted_compare);
+        if (index == COLENTRY_SORTED_PER_PAGE) {
+            pl = pm + 1;
+        } else {
+            pr = pm;
+        }
+    }
+    if (pl == plast) {
+        assert(index == 0);
+        goto success;
+    }
+    // when we finally get pl == pr, we need to read this last page in
+    bzero(colentrybuf, PAGESIZE);
+    result = file_read(col->col_index_file, pl, colentrybuf);
+    if (result) {
+        goto done;
+    }
+    struct column_entry_sorted target;
+    target.ce_val = val;
+    uint64_t ntuples_in_page = (pl < plast) ? COLENTRY_SORTED_PER_PAGE :
+            ntuples % COLENTRY_SORTED_PER_PAGE;
+    index = binary_search(&target, colentrybuf, ntuples_in_page,
+                          sizeof(struct column_entry_sorted),
+                          column_entry_sorted_compare);
+    if (index == COLENTRY_SORTED_PER_PAGE) {
+        // TODO what to do? is this possible?
+    } else {
+        // TODO dereference and check?
+    }
+
+  success:
+    result = 0;
+    *retpage = pl;
+    *retindex = index;
+    goto done;
+  done:
+    return result;
 }
 
 // PRECONDITION: MUST BE HOLDING COLUMN LOCK
@@ -485,35 +559,6 @@ column_select_sorted(struct column *col, struct op *op,
                      struct column_ids *cids)
 {
     (void) column_sorted_search;
-    /*
-     * TODO: need to perform multiple binary searches for low and high/val
-     * then scan all the tuples in between
-    assert(col != NULL);
-    assert(op != NULL);
-    assert(cids != NULL);
-    assert(PAGESIZE % sizeof(struct column_entry_sorted) == 0);
-
-    int result;
-    struct column_entry_sorted target;
-    target.ce_val =
-    struct column_entry_sorted colentrybuf[COLENTRY_SORTED_PER_PAGE];
-    uint64_t ntuples = col->col_disk.cd_ntuples;
-    page_t page_l = FILE_FIRST_PAGE;
-    page_t page_r = FILE_FIRST_PAGE + (ntuples / COLENTRY_SORTED_PER_PAGE);
-    while (page_l < page_r) {
-        page_t page_m = page_l + (page_r - page_l) / 2;
-        bzero(colentrybuf, PAGESIZE);
-        result = file_read(col->col_file, page_m, colentrybuf);
-        if (result) {
-            goto done;
-        }
-        unsigned index = binary_search()
-    }
-
-    result = 0;
-  done:
-    return result;
-  */
     return 0;
 }
 
@@ -719,15 +764,6 @@ column_vals_destroy(struct column_vals *vals)
     assert(vals != NULL);
     free(vals->cval_vals);
     free(vals);
-}
-
-static
-int
-column_entry_sorted_compare(const void *a, const void *b)
-{
-    struct column_entry_sorted *aent = (struct column_entry_sorted *) a;
-    struct column_entry_sorted *bent = (struct column_entry_sorted *) b;
-    return aent->ce_val - bent->ce_val;
 }
 
 static

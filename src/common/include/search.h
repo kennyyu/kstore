@@ -8,6 +8,6 @@
 // if we were to insert x into the array. The caller must still check
 // if the value at the returned index.
 unsigned binary_search(void *x, void *vals, unsigned nvals, size_t size,
-                       int (*compare)(void *a, void *b));
+                       int (*compare)(const void *a, const void *b));
 
 #endif
