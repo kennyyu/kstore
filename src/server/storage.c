@@ -476,7 +476,6 @@ column_select_sorted_range(struct column *col, uint64_t left, uint64_t right,
         page_t curpage =
                 FILE_FIRST_PAGE + (curtuple / COLENTRY_SORTED_PER_PAGE);
         if (curpage != bufpage) {
-            bzero(colentrybuf, PAGESIZE);
             result = file_read(col->col_index_file, curpage, colentrybuf);
             if (result) {
                 goto done;
@@ -521,7 +520,6 @@ column_search_sorted(struct column *col, int val, uint64_t *retindex)
     page_t pr = plast;
     while (pl < pr) {
         page_t pm = pl + (pr - pl) / 2;
-        bzero(colentrybuf, PAGESIZE);
         result = file_read(col->col_index_file, pm, colentrybuf);
         if (result) {
             goto done;
@@ -556,7 +554,6 @@ column_search_sorted(struct column *col, int val, uint64_t *retindex)
     // our buffer is equal to pl. If it's not, load the page into
     // the buffer.
     if (pl != pbuf) {
-        bzero(colentrybuf, PAGESIZE);
         result = file_read(col->col_index_file, pl, colentrybuf);
         if (result) {
             goto done;
@@ -682,7 +679,6 @@ column_select_unsorted(struct column *col, struct op *op,
     uint64_t ntuples = col->col_disk.cd_ntuples;
     page_t page = FILE_FIRST_PAGE;
     while (scanned < ntuples) {
-        bzero(colentrybuf, PAGESIZE);
         result = file_read(col->col_base_file, page, colentrybuf);
         if (result) {
             goto done;
@@ -777,7 +773,6 @@ column_fetch_base_data(struct column *col, struct column_ids *ids,
         // if the requested page is not the current page in the buffer,
         // read in that page and update the curpage
         if (requestedpage != curpage) {
-            bzero(colentrybuf, PAGESIZE);
             result = file_read(col->col_base_file, requestedpage, colentrybuf);
             if (result) {
                 goto done;

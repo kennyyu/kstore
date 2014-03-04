@@ -147,6 +147,7 @@ file_read(struct file *f, page_t page, void *buf)
     assert(f->f_page_bitmap != NULL);
     assert(bitmap_isset(f->f_page_bitmap, page));
 
+    bzero(buf, PAGESIZE);
     int result = pread(f->f_fd, buf, PAGESIZE, page * PAGESIZE);
     if (result == -1 || result == 0) {
         return -1;
