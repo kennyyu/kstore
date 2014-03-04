@@ -480,6 +480,7 @@ column_select_sorted_range(struct column *col, uint64_t left, uint64_t right,
             if (result) {
                 goto done;
             }
+            bufpage = curpage;
         }
         // mark the bit for this id
         unsigned curindex = curtuple % COLENTRY_SORTED_PER_PAGE;
