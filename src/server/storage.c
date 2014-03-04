@@ -438,7 +438,16 @@ int
 column_select_sorted(struct column *col, struct op *op,
                      struct column_ids *cids)
 {
-    // TODO
+    /*
+    assert(col != NULL);
+    assert(op != NULL);
+    assert(cids != NULL);
+    assert(PAGESIZE % sizeof(struct column_entry_sorted) == 0);
+
+    int result;
+    struct column_entry_sorted colentrybuf[COLENTRY_SORTED_PER_PAGE];
+    uint64_t ntuples = col->col_disk.cd_ntuples;
+    int low = */
     return 0;
 }
 

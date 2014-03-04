@@ -67,6 +67,8 @@ struct column_entry_sorted {
     uint32_t ce_index;
 };
 
+#define COLENTRY_SORTED_PER_PAGE (PAGESIZE / sizeof(struct column_entry_sorted))
+
 // create the directory if it doesn't exist, and init metadata file
 struct storage *storage_init(char *dbdir);
 void storage_close(struct storage *storage);
