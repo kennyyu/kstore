@@ -217,7 +217,7 @@ storage_add_column(struct storage *storage, char *colname,
     // extend the file with a new page
 
     // create a file to store the column data
-    char filenamebuf[128];
+    char filenamebuf[56];
     sprintf(filenamebuf, "%s/%s.column", storage->st_dbdir, colname);
     struct file *colfile = file_open(filenamebuf);
     if (colfile == NULL) {
@@ -226,6 +226,7 @@ storage_add_column(struct storage *storage, char *colname,
     }
 
     struct column_on_disk newcol;
+    bzero(&newcol, sizeof(struct column_on_disk));
     strcpy(newcol.cd_col_name, colname);
     newcol.cd_ntuples = 0;
     newcol.cd_magic = COLUMN_TAKEN;
@@ -302,13 +303,28 @@ column_open(struct storage *storage, char *colname)
     }
     memcpy(&col->col_disk, &colbuf[colindex], sizeof(struct column_on_disk));
 
-    // open the file for the column
-    char filenamebuf[128];
+    // open the base file for the column
+    char filenamebuf[56];
     sprintf(filenamebuf, "%s/%s", storage->st_dbdir,
             col->col_disk.cd_base_file);
     col->col_base_file = file_open(filenamebuf);
     if (col->col_base_file == NULL) {
         goto cleanup_malloc;
+    }
+
+    // open the index file for the column if it exists
+    // only columns that have btree and sorted storage with > 0 tuples
+    // have indices built
+    col->col_index_file = NULL;
+    if ((col->col_disk.cd_stype == STORAGE_BTREE
+         || col->col_disk.cd_stype == STORAGE_SORTED)
+        && col->col_disk.cd_ntuples > 0) {
+        sprintf(filenamebuf, "%s/%s", storage->st_dbdir,
+                col->col_disk.cd_index_file);
+        col->col_index_file = file_open(filenamebuf);
+        if (col->col_index_file == NULL) {
+            goto cleanup_file;
+        }
     }
 
     // allocate the lock to protect the column
@@ -332,6 +348,9 @@ column_open(struct storage *storage, char *colname)
   cleanup_lock:
     rwlock_destroy(col->col_rwlock);
   cleanup_file:
+    if (col->col_index_file != NULL) {
+        file_close(col->col_index_file);
+    }
     file_close(col->col_base_file);
   cleanup_malloc:
     free(col);
