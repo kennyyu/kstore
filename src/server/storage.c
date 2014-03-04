@@ -435,28 +435,6 @@ column_close(struct column *col)
     lock_release(storage->st_lock);
 }
 
-static
-bool
-column_select_predicate(int candidateval, struct op *op)
-{
-    assert(op != NULL);
-    switch (op->op_type) {
-    case OP_SELECT_ALL:
-    case OP_SELECT_ALL_ASSIGN:
-        return true;
-    case OP_SELECT_RANGE:
-    case OP_SELECT_RANGE_ASSIGN:
-        return (candidateval >= op->op_select.op_sel_low)
-               && (candidateval <= op->op_select.op_sel_high);
-    case OP_SELECT_VALUE:
-    case OP_SELECT_VALUE_ASSIGN:
-        return (candidateval == op->op_select.op_sel_value);
-    default:
-        assert(0);
-        return false;
-    }
-}
-
 // PRECONDITION: MUST BE HOLDING COLUMN LOCK
 // This will mark the entries in the bitmap for the tuples that satisfy
 // the select predicate.
@@ -478,26 +456,69 @@ column_entry_sorted_compare(const void *a, const void *b)
     return aent->ce_val - bent->ce_val;
 }
 
+// MUST BE HOLDING LOCK ON COLUMN
+// Returns all the indices in the sorted entries at positions [left, right)
 static
 int
-column_sorted_search(struct column *col, int val,
-                     page_t *retpage, unsigned *retindex)
+column_select_sorted_range(struct column *col, uint64_t left, uint64_t right,
+                           struct column_ids *cids)
 {
     assert(col != NULL);
-    assert(retpage != NULL);
-    assert(retindex != NULL);
+    assert(cids != NULL);
+    assert(left <= right);
+    assert(right <= col->col_disk.cd_ntuples);
 
-    // we perform a binary search on the pages. for each page we read in,
-    // we perform a binary search on the tuples in that page to get
-    // a lower bound.
     int result;
     struct column_entry_sorted colentrybuf[COLENTRY_SORTED_PER_PAGE];
+    page_t bufpage = 0;
+    for (uint64_t curtuple = left; curtuple < right; curtuple++) {
+        // load the page into memory if it's not already in memory
+        page_t curpage =
+                FILE_FIRST_PAGE + (curtuple / COLENTRY_SORTED_PER_PAGE);
+        if (curpage != bufpage) {
+            bzero(colentrybuf, PAGESIZE);
+            result = file_read(col->col_index_file, curpage, colentrybuf);
+            if (result) {
+                goto done;
+            }
+        }
+        // mark the bit for this id
+        unsigned curindex = curtuple % COLENTRY_SORTED_PER_PAGE;
+        bitmap_mark(cids->cid_bitmap, colentrybuf[curindex].ce_index);
+    }
+    result = 0;
+    goto done;
+  done:
+    return result;
+}
+
+// PRECONDITION: MUST BE HOLDING COLUMN LOCK
+// retindex will store the lower bound position in the sorted file
+// where the tuple *should* be inserted.
+static
+int
+column_search_sorted(struct column *col, int val, uint64_t *retindex)
+{
+    assert(col != NULL);
+    assert(retindex != NULL);
+
+    int result;
+    struct column_entry_sorted target;
+    target.ce_val = val;
+    struct column_entry_sorted colentrybuf[COLENTRY_SORTED_PER_PAGE];
     uint64_t ntuples = col->col_disk.cd_ntuples;
+
+    // We perform a binary search on the pages. for each page we read in,
+    // we perform a binary search on the tuples in that page to get
+    // a lower bound.
+    // we set the left boundary to be the first available page, and we
+    // set the right boundary to be the first unavailable page
+    unsigned index;
+    page_t pbuf = 0; // the current page that's in the buffer
     page_t pl = FILE_FIRST_PAGE;
-    // take the ceiling
-    page_t plast = FILE_FIRST_PAGE + 1 + ((ntuples - 1) / COLENTRY_SORTED_PER_PAGE);
+    page_t plast =
+            FILE_FIRST_PAGE + 1 + ((ntuples - 1) / COLENTRY_SORTED_PER_PAGE);
     page_t pr = plast;
-    unsigned index = 0;
     while (pl < pr) {
         page_t pm = pl + (pr - pl) / 2;
         bzero(colentrybuf, PAGESIZE);
@@ -505,46 +526,55 @@ column_sorted_search(struct column *col, int val,
         if (result) {
             goto done;
         }
-        struct column_entry_sorted target;
-        target.ce_val = val;
-        uint64_t ntuples_in_page = (pm < plast) ? COLENTRY_SORTED_PER_PAGE :
-                ntuples % COLENTRY_SORTED_PER_PAGE;
+        pbuf = pm;
+
+        // if we're on the last page, we need to make sure we don't
+        // read more than the number of tuples on that page
+        uint64_t ntuples_in_page = (pm == plast - 1) ?
+                ntuples % COLENTRY_SORTED_PER_PAGE : COLENTRY_SORTED_PER_PAGE;
+
+        // Attempt to find the tuple on this page
+        // this will return a lower bound index where we *should* insert
+        // the value if we were to insert. The tuple index is not necessarily
+        // equal to our target value
         index = binary_search(&target, colentrybuf, ntuples_in_page,
-                              sizeof(struct column_entry_sorted),
-                              column_entry_sorted_compare);
+                                       sizeof(struct column_entry_sorted),
+                                       column_entry_sorted_compare);
         if (index == COLENTRY_SORTED_PER_PAGE) {
-            pl = pm + 1;
+            pl = pm + 1; // the tuple lives on the right page
         } else {
-            pr = pm;
+            pr = pm; // the tuple *might* live on this page or left
         }
     }
+    // If our lower bound is the right boundary, then our tuple is
+    // greater than everything in our sorted projection
     if (pl == plast) {
-        assert(index == 0);
+        index = 0;
         goto success;
     }
-    // when we finally get pl == pr, we need to read this last page in
-    bzero(colentrybuf, PAGESIZE);
-    result = file_read(col->col_index_file, pl, colentrybuf);
-    if (result) {
-        goto done;
+    // Otherwise, we have pl == pr. Check to see if the page that's in
+    // our buffer is equal to pl. If it's not, load the page into
+    // the buffer.
+    if (pl != pbuf) {
+        bzero(colentrybuf, PAGESIZE);
+        result = file_read(col->col_index_file, pl, colentrybuf);
+        if (result) {
+            goto done;
+        }
     }
-    struct column_entry_sorted target;
-    target.ce_val = val;
-    uint64_t ntuples_in_page = (pl < plast) ? COLENTRY_SORTED_PER_PAGE :
-            ntuples % COLENTRY_SORTED_PER_PAGE;
+    // Now attempt to find our tuple on this page. Since pl != plast,
+    // our lower bound MUST be in this page.
+    uint64_t ntuples_in_page = (pl == plast - 1) ?
+            ntuples % COLENTRY_SORTED_PER_PAGE : COLENTRY_SORTED_PER_PAGE;
     index = binary_search(&target, colentrybuf, ntuples_in_page,
                           sizeof(struct column_entry_sorted),
                           column_entry_sorted_compare);
-    if (index == COLENTRY_SORTED_PER_PAGE) {
-        // TODO what to do? is this possible?
-    } else {
-        // TODO dereference and check?
-    }
+    assert(index != COLENTRY_SORTED_PER_PAGE);
+    goto success;
 
   success:
     result = 0;
-    *retpage = pl;
-    *retindex = index;
+    *retindex = (pl - FILE_FIRST_PAGE) * COLENTRY_SORTED_PER_PAGE + index;
     goto done;
   done:
     return result;
@@ -558,8 +588,79 @@ int
 column_select_sorted(struct column *col, struct op *op,
                      struct column_ids *cids)
 {
-    (void) column_sorted_search;
-    return 0;
+    assert(col != NULL);
+    assert(op != NULL);
+    assert(cids != NULL);
+
+    int result;
+    uint64_t left;
+    uint64_t right;
+    switch (op->op_type) {
+    case OP_SELECT_ALL:
+    case OP_SELECT_ALL_ASSIGN:
+        left = 0;
+        right = col->col_disk.cd_ntuples;
+        break;
+    case OP_SELECT_RANGE:
+    case OP_SELECT_RANGE_ASSIGN:
+        // we search for the lower bound of high + 1 so that our
+        // range is [low,high] inclusive
+        result = column_search_sorted(col, op->op_select.op_sel_low, &left);
+        if (result) {
+            goto done;
+        }
+        result = column_search_sorted(col, op->op_select.op_sel_high + 1, &right);
+        if (result) {
+            goto done;
+        }
+        break;
+    case OP_SELECT_VALUE:
+    case OP_SELECT_VALUE_ASSIGN:
+        result = column_search_sorted(col, op->op_select.op_sel_value, &left);
+        if (result) {
+            goto done;
+        }
+        result = column_search_sorted(col, op->op_select.op_sel_value + 1, &right);
+        if (result) {
+            goto done;
+        }
+        break;
+    default:
+        assert(0);
+        break;
+    }
+    result = column_select_sorted_range(col, left, right, cids);
+    if (result) {
+        goto done;
+    }
+
+    // success
+    result = 0;
+    goto done;
+  done:
+    return result;
+}
+
+static
+bool
+column_select_predicate(int candidateval, struct op *op)
+{
+    assert(op != NULL);
+    switch (op->op_type) {
+    case OP_SELECT_ALL:
+    case OP_SELECT_ALL_ASSIGN:
+        return true;
+    case OP_SELECT_RANGE:
+    case OP_SELECT_RANGE_ASSIGN:
+        return (candidateval >= op->op_select.op_sel_low)
+               && (candidateval <= op->op_select.op_sel_high);
+    case OP_SELECT_VALUE:
+    case OP_SELECT_VALUE_ASSIGN:
+        return (candidateval == op->op_select.op_sel_value);
+    default:
+        assert(0);
+        return false;
+    }
 }
 
 // PRECONDITION: MUST BE HOLDING COLUMN LOCK
@@ -623,9 +724,7 @@ column_select(struct column *col, struct op *op)
         result = column_select_unsorted(col, op, cids);
         break;
     case STORAGE_SORTED:
-        //result = column_select_sorted(col, op, cids);
-        (void) column_select_sorted; // TODO
-        result = column_select_unsorted(col, op, cids);
+        result = column_select_sorted(col, op, cids);
         break;
     case STORAGE_BTREE:
         result = column_select_btree(col, op, cids);

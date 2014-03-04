@@ -9,7 +9,7 @@ binary_search(void *x, void *vals, unsigned nvals, size_t size,
     unsigned r = nvals;
     while (l < r) {
         unsigned m = l + (r - l) / 2;
-        void *y = *((void **)(vals + size * m));
+        void *y = vals + size * m;
         if (compare(y, x) < 0) {
             l = m + 1;
         } else {
