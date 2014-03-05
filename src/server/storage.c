@@ -467,6 +467,7 @@ column_select_sorted_range(struct column *col, uint64_t left, uint64_t right,
     assert(cids != NULL);
     assert(left <= right);
     assert(right <= col->col_disk.cd_ntuples);
+    assert(PAGESIZE % sizeof(struct column_entry_sorted) == 0);
 
     int result;
     struct column_entry_sorted colentrybuf[COLENTRY_SORTED_PER_PAGE];
