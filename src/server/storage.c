@@ -517,8 +517,8 @@ column_search_sorted(struct column *col, int val, uint64_t *retindex)
     unsigned index;
     page_t pbuf = 0; // the current page that's in the buffer
     page_t pl = FILE_FIRST_PAGE;
-    page_t plast =
-            FILE_FIRST_PAGE + 1 + ((ntuples - 1) / COLENTRY_SORTED_PER_PAGE);
+    page_t plast = FILE_FIRST_PAGE +
+            ((ntuples + COLENTRY_SORTED_PER_PAGE - 1) / COLENTRY_SORTED_PER_PAGE);
     page_t pr = plast;
     while (pl < pr) {
         page_t pm = pl + (pr - pl) / 2;
@@ -949,8 +949,9 @@ static
 int
 btree_entry_compare(const void *a, const void *b)
 {
-    // TODO
-    return 0;
+    struct btree_entry *aent = (struct btree_entry *) a;
+    struct btree_entry *bent = (struct btree_entry *) b;
+    return (aent->bte_key - bent->bte_key);
 }
 
 // PRECONDITION: must be holding lock on column
@@ -998,7 +999,34 @@ column_load_index_btree(struct file *f, int *vals, uint64_t num)
     (void) column_search_btree;
     (void) column_select_btree_range;
     (void) btree_entry_compare;
-    return 0;
+
+    assert(f != NULL);
+    assert(vals != NULL);
+
+    // Create our sorted entries
+    int result;
+    struct btree_entry *entries = malloc(sizeof(int) * num);
+    if (entries != NULL) {
+        goto done;
+    }
+    bzero(entries, sizeof(struct btree_entry) * num);
+    for (uint64_t i = 0; i < num; i++) {
+        entries[i].bte_key = vals[i];
+        entries[i].bte_index = i;
+    }
+    qsort(entries, num, sizeof(struct btree_entry), btree_entry_compare);
+
+    // Now create our leaf nodes
+    unsigned nleafnodes = 1 + num / BTENTRY_PER_PAGE;
+    (void)nleafnodes;
+
+
+    result = 0;
+    goto cleanup_entries;
+  cleanup_entries:
+    free(entries);
+  done:
+    return result;
 }
 
 int
