@@ -945,6 +945,62 @@ column_load_index_sorted(struct file *f, int *vals, uint64_t num)
     return result;
 }
 
+static
+int
+btree_entry_compare(const void *a, const void *b)
+{
+    // TODO
+    return 0;
+}
+
+// PRECONDITION: must be holding lock on column
+static
+int
+column_select_btree_range(struct column *col,
+                          page_t pleft, unsigned ixleft,
+                          page_t pright, unsigned ixright,
+                          struct column_ids *cids)
+{
+    // TODO [left, right)
+    // follow next pointers in pages
+    return 0;
+}
+
+// PRECONDITION: must be holding lock on column
+static
+int
+column_search_btree(struct column *col, int val,
+                    page_t *retpage, unsigned *retindex)
+{
+    // TODO
+    // Binary search the current node
+    // chase pointer.
+    return 0;
+}
+
+// PRECONDITION: must be holding lock on column
+static
+int
+column_load_index_btree(struct file *f, int *vals, uint64_t num)
+{
+    // TODO
+    // convert vals -> array of btree_entry's
+    // create array of btree_nodes
+    // copy btree_entry's into leaf node pages, update metadata
+    // store internal nodes in resizable array
+    // keep special root node out of resizable array
+    // merge two btrees ->
+    // void merge(btree *left, btree *right, btree **parent)
+    //   set parent to be new root (parent == left if no merging needed
+    //   to happen
+    // get a btree at the end of the day
+    // need to traverse tree and write all the data to disk
+    (void) column_search_btree;
+    (void) column_select_btree_range;
+    (void) btree_entry_compare;
+    return 0;
+}
+
 int
 column_load(struct column *col, int *vals, uint64_t num)
 {
@@ -962,7 +1018,7 @@ column_load(struct column *col, int *vals, uint64_t num)
     result = column_load_unsorted(col->col_base_file, vals, num);
     switch (col->col_disk.cd_stype) {
     case STORAGE_BTREE:
-        assert(0); //unimplemented
+        result = column_load_index_btree(col->col_index_file, vals, num);
         break;
     case STORAGE_SORTED:
         result = column_load_index_sorted(col->col_index_file, vals, num);

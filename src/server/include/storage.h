@@ -7,6 +7,7 @@
 #include "../../common/include/bitmap.h"
 #include "../../common/include/array.h"
 #include "file.h"
+#include "btree.h"
 
 #define COLUMN_TAKEN 0xCAFEBABE
 #define COLUMN_FREE 0x0
