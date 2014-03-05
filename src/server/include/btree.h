@@ -26,10 +26,11 @@ CASSERT(PAGESIZE % sizeof(struct btree_entry) == 0);
 
 struct btree_header {
     enum btree_node_type bth_type;
-    uint32_t bth_padding;
-    uint64_t bth_nentries; // number of taken entries in this slot
-    page_t bth_next; // pointer to next page with sequential data
-    page_t bth_left; // pointer to page < smallest key in this page
+    uint32_t bth_nentries; // num entries in this node
+    union {
+        page_t bth_next; // used for LEAF nodes
+        page_t bth_left; // used for INTERNAL nodes
+    };
 };
 
 CASSERT(sizeof(struct btree_header) % sizeof(struct btree_entry) == 0);
