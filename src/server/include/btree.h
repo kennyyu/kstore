@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include "file.h"
+#include "../../common/include/cassert.h"
 
 // location of the root page
 #define BTREE_ROOT_PAGE FILE_FIRST_PAGE
@@ -21,6 +22,8 @@ struct btree_entry {
     };
 };
 
+CASSERT(PAGESIZE % sizeof(struct btree_entry) == 0);
+
 struct btree_header {
     enum btree_node_type bth_type;
     uint32_t bth_padding;
@@ -29,6 +32,8 @@ struct btree_header {
     page_t bth_left; // pointer to page < smallest key in this page
 };
 
+CASSERT(sizeof(struct btree_header) % sizeof(struct btree_entry) == 0);
+
 #define BTENTRY_PER_PAGE ((PAGESIZE - sizeof(struct btree_header)) / sizeof(struct btree_entry))
 
 // this will be the size of a page
@@ -36,5 +41,7 @@ struct btree_node {
     struct btree_header bt_header;
     struct btree_entry bt_entries[BTENTRY_PER_PAGE];
 };
+
+CASSERT(PAGESIZE == sizeof(struct btree_node));
 
 #endif

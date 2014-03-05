@@ -8,6 +8,7 @@
 #include "../../common/include/array.h"
 #include "file.h"
 #include "btree.h"
+#include "../../common/include/cassert.h"
 
 #define COLUMN_TAKEN 0xCAFEBABE
 #define COLUMN_FREE 0x0
@@ -24,6 +25,8 @@ struct column_on_disk {
     char cd_base_file[56]; // file where data is stored, does not include dbdir
     char cd_index_file[56]; // file where index is stored, does not include dbdir
 };
+
+CASSERT(PAGESIZE % sizeof(struct column_on_disk) == 0);
 
 #define COLUMNS_PER_PAGE (PAGESIZE / sizeof(struct column_on_disk))
 
@@ -62,6 +65,8 @@ struct column_entry_unsorted {
     int ce_val;
 };
 
+CASSERT(PAGESIZE % sizeof(struct column_entry_unsorted) == 0);
+
 #define COLENTRY_UNSORTED_PER_PAGE (PAGESIZE / sizeof(struct column_entry_unsorted))
 
 struct column_entry_sorted {
@@ -69,6 +74,8 @@ struct column_entry_sorted {
     uint32_t ce_padding;
     uint64_t ce_index;
 };
+
+CASSERT(PAGESIZE % sizeof(struct column_entry_sorted) == 0);
 
 #define COLENTRY_SORTED_PER_PAGE (PAGESIZE / sizeof(struct column_entry_sorted))
 
