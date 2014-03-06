@@ -1072,6 +1072,7 @@ column_select_unsorted(struct column *col, struct op *op,
                 bitmap_mark(cids->cid_bitmap, scanned);
             }
         }
+        page++;
     }
     assert(scanned == ntuples);
     result = 0;
@@ -1252,10 +1253,9 @@ column_load_unsorted(struct file *f, int *vals, uint64_t num)
     int intbuf[PAGESIZE / sizeof(int)];
     uint64_t curtuple = 0;
     while (curtuple < num) {
-        uint64_t tuples_tocopy = num - curtuple;
-        // avoid overflow
-        size_t bytes_tocopy =
-                sizeof(int) * (MIN(PAGESIZE / sizeof(int), tuples_tocopy));
+        uint64_t tuples_tocopy =
+                MIN(COLENTRY_UNSORTED_PER_PAGE, num - curtuple);
+        size_t bytes_tocopy = tuples_tocopy * sizeof(int);
         bzero(intbuf, PAGESIZE);
         memcpy(intbuf, vals + curtuple, bytes_tocopy);
         page_t page;
@@ -1300,10 +1300,10 @@ column_load_index_sorted(struct file *f, int *vals, uint64_t num)
     struct column_entry_sorted colentrybuf[COLENTRY_SORTED_PER_PAGE];
     uint64_t curtuple = 0;
     while (curtuple < num) {
-        uint64_t tuples_tocopy = num - curtuple;
+        uint64_t tuples_tocopy = MIN(COLENTRY_SORTED_PER_PAGE, num - curtuple);
         // avoid overflow
         size_t bytes_tocopy = sizeof(struct column_entry_sorted)
-                * (MIN(COLENTRY_SORTED_PER_PAGE, tuples_tocopy));
+                * tuples_tocopy;
         bzero(colentrybuf, PAGESIZE);
         memcpy(colentrybuf, entries + curtuple, bytes_tocopy);
         page_t page;

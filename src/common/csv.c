@@ -20,9 +20,7 @@ csv_destroy(struct csv_resultarray *results)
     assert(results != NULL);
     while (csv_resultarray_num(results) > 0) {
         struct csv_result *header = csv_resultarray_get(results, 0);
-        while (intarray_num(header->csv_vals) > 0) {
-            intarray_remove(header->csv_vals, 0);
-        }
+        header->csv_vals->arr.num = 0;
         intarray_destroy(header->csv_vals);
         free(header);
         csv_resultarray_remove(results, 0);
