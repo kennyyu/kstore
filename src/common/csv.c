@@ -47,13 +47,8 @@ csv_parse(int fd)
         goto cleanup_file;
     }
 
-    // parse the header line
     char buf[BUFSIZE];
     bzero(buf, BUFSIZE);
-    //bzero(buf, BUFSIZE);
-    //assert(fgets(buf, BUFSIZE, file) != NULL);
-    //char *saveptr;
-    //char *pch = strtok_r(buf, DELIMITERS, &saveptr);
     char c;
     unsigned ix = 0;
     while ((c = fgetc(file)) != EOF) {
@@ -72,7 +67,6 @@ csv_parse(int fd)
                 goto free_csv_resultarray;
             }
             strcpy(header->csv_colname, buf);
-            //pch = strtok_r(NULL, DELIMITERS, &saveptr);
             ix = 0;
             bzero(buf, BUFSIZE);
             if (c == '\n') {
@@ -82,6 +76,7 @@ csv_parse(int fd)
             buf[ix++] = c;
         }
     }
+    assert(c != EOF);
 
     // loop until we have no more rows
     ix = 0;
@@ -95,7 +90,6 @@ csv_parse(int fd)
             if (result) {
                 goto free_csv_resultarray;
             }
-            //pch = strtok_r(NULL, DELIMITERS, &saveptr);
             ix = 0;
             bzero(buf, BUFSIZE);
             if (c == '\n') {
@@ -106,22 +100,6 @@ csv_parse(int fd)
         } else {
             buf[ix++] = c;
         }
-        /*
-        pch = strtok_r(buf, DELIMITERS, &saveptr);
-        unsigned colnum = 0;
-        while (pch != NULL) {
-            assert(colnum < csv_resultarray_num(results));
-            int val = atoi(pch);
-            struct csv_result *header = csv_resultarray_get(results, colnum);
-            result = intarray_add(header->csv_vals, (void *) val, NULL);
-            if (result) {
-                goto free_csv_resultarray;
-            }
-            pch = strtok_r(NULL, DELIMITERS, &saveptr);
-            colnum++;
-        }
-        assert(colnum == csv_resultarray_num(results));
-        */
     }
     // success
     goto cleanup_file;
