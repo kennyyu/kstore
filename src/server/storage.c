@@ -436,6 +436,332 @@ column_close(struct column *col)
     lock_release(storage->st_lock);
 }
 
+static
+int
+btree_entry_compare(const void *a, const void *b)
+{
+    struct btree_entry *aent = (struct btree_entry *) a;
+    struct btree_entry *bent = (struct btree_entry *) b;
+    return (aent->bte_key - bent->bte_key);
+}
+
+// PRECONDITION: must be holding lock on column
+// Finds all ids on [left, right)
+static
+int
+btree_select_range(struct column *col,
+                   page_t pleft, unsigned ixleft,
+                   page_t pright, unsigned ixright,
+                   struct column_ids *cids)
+{
+    assert(col != NULL);
+    assert(cids != NULL);
+    assert(pleft != BTREE_PAGE_NULL);
+    assert(pright != BTREE_PAGE_NULL);
+    assert(ixleft <= BTENTRY_PER_PAGE);
+    assert(ixright <= BTENTRY_PER_PAGE);
+
+    int result;
+    struct btree_node nodebuf;
+
+    page_t curpage = pleft;
+    unsigned curix = ixleft;
+    while ((curpage != pright) && (curix != ixright)) {
+        result = file_read(col->col_index_file, curpage, &nodebuf);
+        if (result) {
+            goto done;
+        }
+        assert(nodebuf.bt_header.bth_type == BTREE_NODE_LEAF);
+        assert(nodebuf.bt_header.bth_page == curpage);
+
+        unsigned rightbound = (curpage == pright) ? ixright
+                : nodebuf.bt_header.bth_nentries;
+        for (/* none */; curix < rightbound; curix++) {
+            struct btree_entry *entry = &nodebuf.bt_entries[curix];
+            bitmap_mark(cids->cid_bitmap, entry->bte_index);
+        }
+        curpage = nodebuf.bt_header.bth_next;
+        assert(curpage != BTREE_PAGE_NULL);
+        curix = 0;
+    }
+
+    // success
+    result = 0;
+    goto done;
+  done:
+    return result;
+}
+
+// PRECONDITION: must be holding lock on column
+static
+int
+btree_search(struct column *col, int val,
+             page_t *retpage, unsigned *retindex)
+{
+    int result;
+    page_t targetpage = BTREE_PAGE_NULL;
+    unsigned targetindex = 0;
+    struct btree_entry target;
+    bzero(&target, sizeof(struct btree_entry));
+    target.bte_key = val;
+
+    struct btree_node nodebuf;
+    page_t curpage = col->col_disk.cd_btree_root;
+    while (targetpage == BTREE_PAGE_NULL) {
+        assert(curpage != BTREE_PAGE_NULL);
+        result = file_read(col->col_index_file, curpage, &nodebuf);
+        if (result) {
+            goto done;
+        }
+        unsigned ix = binary_search(&target, &nodebuf.bt_entries,
+                                    BTENTRY_PER_PAGE,
+                                    sizeof(struct btree_entry),
+                                    btree_entry_compare);
+        switch (nodebuf.bt_header.bth_type) {
+        case BTREE_NODE_INTERNAL:
+            if (ix == 0) { // chase left pointer
+                curpage = nodebuf.bt_header.bth_left;
+            } else { // chase ix - 1
+                curpage = nodebuf.bt_entries[ix - 1].bte_page;
+            }
+            break;
+        case BTREE_NODE_LEAF:
+            targetpage = curpage;
+            targetindex = ix;
+            goto success;
+        default:
+            assert(0);
+            break;
+        }
+    }
+
+    // success
+  success:
+    result = 0;
+    assert(targetpage != BTREE_PAGE_NULL);
+    *retpage = targetpage;
+    *retindex = targetindex;
+    goto done;
+  done:
+    return result;
+}
+
+static
+int
+btree_node_synch(struct file *f, struct btree_node *node)
+{
+    assert(f != NULL);
+    assert(node != NULL);
+    assert(node->bt_header.bth_page != BTREE_PAGE_NULL);
+    return file_write(f, node->bt_header.bth_page, node);
+}
+
+static
+int
+btree_insert_entry(struct file *f,
+                   struct btree_node *current,
+                   struct btree_entry *entry)
+{
+    assert(current != NULL);
+    unsigned nentries = current->bt_header.bth_nentries;
+    assert(nentries < BTENTRY_PER_PAGE);
+
+    unsigned ix = binary_search(entry, current->bt_entries, nentries,
+                                sizeof(struct btree_entry),
+                                btree_entry_compare);
+    if (ix < nentries) {
+        // memmove allows overlapping regions
+        memmove(&current->bt_entries[ix + 1], &current->bt_entries[ix],
+                sizeof(struct btree_entry) * (nentries - ix));
+    }
+    current->bt_entries[ix] = *entry;
+    current->bt_header.bth_nentries++;
+    return btree_node_synch(f, current);
+}
+
+// Inserts the entry into current
+// If a split occurred, returns a new entry and a pointer to the node
+// that needs to be fixed
+static
+int
+btree_insert_helper(struct file *f,
+                    struct btree_node *current,
+                    struct btree_entry *entry,
+                    struct btree_entry *retentry)
+{
+    (void) btree_select_range;
+    (void) btree_search;
+    assert(f != NULL);
+    assert(current != NULL);
+    assert(entry != NULL);
+    assert(retentry != NULL);
+
+    int result = 0;
+    struct btree_entry entrybuf;
+    bzero(&entrybuf, sizeof(struct btree_entry));
+    struct btree_node nodebuf;
+    bzero(&nodebuf, sizeof(struct btree_node));
+
+    // If we have an internal node, recurse down until we can insert entry.
+    // Each invocation will possibly propagate up to the caller a new
+    // entry to insert into the current node.
+    if (current->bt_header.bth_type == BTREE_NODE_INTERNAL) {
+        assert(current->bt_header.bth_nentries != 0);
+        unsigned ix = binary_search(entry,
+                                    current->bt_entries,
+                                    current->bt_header.bth_nentries,
+                                    sizeof(struct btree_entry),
+                                    btree_entry_compare);
+        page_t pchild;
+        if (ix == 0) { // chase left pointer
+            pchild = current->bt_header.bth_left;
+        } else { // chase ix - 1 pointer
+            pchild = current->bt_entries[ix - 1].bte_page;
+        }
+        assert(pchild != BTREE_PAGE_NULL);
+        result = file_read(f, pchild, &nodebuf);
+        assert(result == 0);
+        bzero(&entrybuf, sizeof(struct btree_entry));
+        result = btree_insert_helper(f, &nodebuf, entry, &entrybuf);
+        assert(result == 0);
+
+        // If we get a new entry, it must be an entry pointing to
+        // a new page. Therefore, if we get NULL, we're done
+        if (entrybuf.bte_page == BTREE_PAGE_NULL) {
+            goto success;
+        }
+        // Otherwise, we need to insert the new entry into the current node
+        entry = &entrybuf;
+    }
+
+    // If we have space in this node, insert it.
+    unsigned nentries = current->bt_header.bth_nentries;
+    if (nentries < BTENTRY_PER_PAGE) {
+        result = btree_insert_entry(f, current, entry);
+        assert(result == 0);
+        goto success;
+    }
+
+    // Otherwise, we need to split and copy half the entries to the new node.
+    bzero(&nodebuf, sizeof(struct btree_node));
+    page_t newpage;
+    result = file_alloc_page(f, &newpage);
+    assert(result == 0);
+    unsigned halfix = nentries / 2;
+    nodebuf.bt_header.bth_type = current->bt_header.bth_type;
+    nodebuf.bt_header.bth_page = newpage;
+    current->bt_header.bth_nentries = halfix;
+    struct btree_entry *base;
+    switch (current->bt_header.bth_type) {
+    case BTREE_NODE_LEAF:
+        nodebuf.bt_header.bth_nentries = nentries - halfix;
+        nodebuf.bt_header.bth_next = current->bt_header.bth_next;
+        current->bt_header.bth_next = newpage;
+        base = &nodebuf.bt_entries[halfix];
+        break;
+    case BTREE_NODE_INTERNAL:
+        // one of the entries from current becomes the left pointer
+        // in the new node
+        nodebuf.bt_header.bth_nentries = (nentries - halfix) - 1;
+        nodebuf.bt_header.bth_left = current->bt_entries[halfix].bte_page;
+        base = &nodebuf.bt_entries[halfix + 1];
+        break;
+    default:
+        assert(0);
+        break;
+    }
+    size_t bytes_tocopy =
+            sizeof(struct btree_entry) * nodebuf.bt_header.bth_nentries;
+    memcpy(&nodebuf.bt_entries, base, bytes_tocopy);
+    bzero(base, bytes_tocopy);
+
+    // If the entry to be inserted is geq than the smallest key
+    // in the new right node, the entry should be inserted into that node.
+    if (btree_entry_compare(entry, &nodebuf.bt_entries[0]) >= 0) {
+        result = btree_insert_entry(f, &nodebuf, entry);
+        assert(result == 0);
+    } else {
+        result = btree_insert_entry(f, current, entry);
+        assert(result == 0);
+    }
+
+    // Now we need to synch all the changes in the current and new nodes
+    result = btree_node_synch(f, &nodebuf);
+    assert(result == 0);
+    result = btree_node_synch(f, current);
+    assert(result == 0);
+
+    // Propagate the new entry back to the caller to be inserted into the
+    // parent node.
+    bzero(&entrybuf, sizeof(struct btree_entry));
+    entrybuf.bte_key = nodebuf.bt_entries[0].bte_key;
+    entrybuf.bte_page = newpage;
+    goto success;
+
+  success:
+    result = 0;
+    *retentry = entrybuf;
+    goto done;
+  done:
+    return result;
+}
+
+// PRECONDITION: must be holding lock on column
+static
+int
+btree_insert(struct column *col, struct btree_entry *entry)
+{
+    assert(col != NULL);
+    assert(entry != NULL);
+
+    int result;
+    page_t newrootpage;
+    struct btree_entry entrybuf;
+    bzero(&entrybuf, sizeof(struct btree_entry));
+    struct btree_node rootbuf;
+    result = file_read(col->col_index_file,
+                       col->col_disk.cd_btree_root, &rootbuf);
+    assert(result == 0);
+
+    result = btree_insert_helper(col->col_index_file, &rootbuf, entry,
+                                 &entrybuf);
+    assert(result == 0);
+
+    // If after insertion, our current does not have a sibling, we're done
+    if (entrybuf.bte_page == BTREE_PAGE_NULL) {
+        newrootpage = col->col_disk.cd_btree_root;
+        goto success;
+    }
+
+    // If we do have a sibling, we need to create a new internal parent node.
+    // The left pointer of the new parent node will be the current node,
+    // and the first entry of the new parent node will tbe the returned
+    // entry which contains a pointer to the sibling node.
+    struct btree_node nodebuf;
+    bzero(&nodebuf, sizeof(struct btree_node));
+    page_t newpage;
+    result = file_alloc_page(col->col_index_file, &newpage);
+    assert(result == 0);
+    nodebuf.bt_header.bth_type = BTREE_NODE_INTERNAL;
+    nodebuf.bt_header.bth_nentries = 1;
+    nodebuf.bt_header.bth_page = newpage;
+    nodebuf.bt_header.bth_left = rootbuf.bt_header.bth_page;
+    nodebuf.bt_entries[0] = entrybuf;
+    result = btree_node_synch(col->col_index_file, &nodebuf);
+    assert(result == 0);
+    newrootpage = newpage;
+    goto success;
+
+  success:
+    result = 0;
+    col->col_disk.cd_btree_root = newrootpage;
+    col->col_disk.cd_ntuples++;
+    col->col_dirty = true;
+    goto done;
+  done:
+    return result;
+}
+
 // PRECONDITION: MUST BE HOLDING COLUMN LOCK
 // This will mark the entries in the bitmap for the tuples that satisfy
 // the select predicate.
@@ -444,8 +770,61 @@ int
 column_select_btree(struct column *col, struct op *op,
                     struct column_ids *cids)
 {
-    // TODO
-    return 0;
+    assert(col != NULL);
+    assert(op != NULL);
+    assert(cids != NULL);
+
+    int result;
+    page_t pleft, pright;
+    unsigned ixleft, ixright;
+    switch (op->op_type) {
+    case OP_SELECT_ALL:
+    case OP_SELECT_ALL_ASSIGN:
+        for (unsigned i = 0; i < col->col_disk.cd_ntuples; i++) {
+            bitmap_mark(cids->cid_bitmap, i);
+        }
+        result = 0;
+        goto done;
+    case OP_SELECT_RANGE:
+    case OP_SELECT_RANGE_ASSIGN:
+        result = btree_search(col, op->op_select.op_sel_low,
+                              &pleft, &ixleft);
+        if (result) {
+            goto done;
+        }
+        result = btree_search(col, op->op_select.op_sel_high + 1,
+                              &pright, &ixright);
+        if (result) {
+            goto done;
+        }
+        break;
+    case OP_SELECT_VALUE:
+    case OP_SELECT_VALUE_ASSIGN:
+        result = btree_search(col, op->op_select.op_sel_value,
+                              &pleft, &ixleft);
+        if (result) {
+            goto done;
+        }
+        result = btree_search(col, op->op_select.op_sel_value + 1,
+                              &pright, &ixright);
+        if (result) {
+            goto done;
+        }
+        break;
+    default:
+        assert(0);
+        break;
+    }
+    result = btree_select_range(col, pleft, ixleft, pright, ixright, cids);
+    if (result) {
+        goto done;
+    }
+
+    // success
+    result = 0;
+    goto done;
+  done:
+    return result;
 }
 
 static
@@ -946,421 +1325,6 @@ column_load_index_sorted(struct file *f, int *vals, uint64_t num)
   done:
     return result;
 }
-
-static
-int
-btree_entry_compare(const void *a, const void *b)
-{
-    struct btree_entry *aent = (struct btree_entry *) a;
-    struct btree_entry *bent = (struct btree_entry *) b;
-    return (aent->bte_key - bent->bte_key);
-}
-
-// PRECONDITION: must be holding lock on column
-static
-int
-column_select_btree_range(struct column *col,
-                          page_t pleft, unsigned ixleft,
-                          page_t pright, unsigned ixright,
-                          struct column_ids *cids)
-{
-    // TODO [left, right)
-    // follow next pointers in pages
-    return 0;
-}
-
-// PRECONDITION: must be holding lock on column
-static
-int
-btree_search(struct column *col, int val,
-             page_t *retpage, unsigned *retindex)
-{
-    // TODO
-    // Binary search the current node
-    // chase pointer.
-    int result;
-    page_t targetpage = BTREE_PAGE_NULL;
-    unsigned targetindex = 0;
-
-    //struct btree_node nodebuf;
-
-    // success
-    result = 0;
-    assert(targetpage != BTREE_PAGE_NULL);
-    *retpage = targetpage;
-    *retindex = targetindex;
-    goto done;
-  done:
-    return result;
-}
-
-// Merge the two btrees.
-// The right tree MUST be a LEAF node
-// Return a pointer to the new parent of the tree, which can possibly
-// bee left.
-/*
-static
-int
-btree_merge(struct file *f, struct btree_node *left, struct btree_node *right,
-            struct btree_node **retparent)
-{
-    assert(left != NULL);
-    assert(right != NULL);
-    assert(left != right);
-    assert(retparent != NULL);
-    assert(right->bt_header.bth_type == BTREE_NODE_LEAF);
-    assert(right->bt_header.bth_nentries != 0);
-    int result;
-    struct btree_node *parent = NULL;
-    struct btree_entry *rightent = &right->bt_entries;
-
-    // handle special case when left is a LEAF
-    // the key in the parent node must be 1 + max(leaf node)
-    if (left->bt_header.bth_type == BTREE_NODE_LEAF) {
-        // need to allocate parent node
-        parent = malloc(sizeof(struct btree_node));
-        if (parent == NULL) {
-            result = -1;
-        }
-        parent->bt_header.bth_type = BTREE_NODE_INTERNAL;
-        parent->bt_header.bth_left = left;
-        parent->bt_header.bth_nentries = 1;
-        parent->bt_entries[0].bte_key = rightent->bte_key;
-        parent->bt_entries[0].bte_page =
-        // handle root page
-    }
-
-    // Do a binary search to find the lower bound on where
-    // the min value of the right node should go in the left node.
-    unsigned index = binary_search(rightent, left->bt_entries,
-                                   left->bt_header.bth_nentries,
-                                   sizeof(struct btree_entry),
-                                   btree_entry_compare);
-    if (index == 0) {
-
-    }
-
-    // Compare the keys
-  success:
-    result = 0;
-    *retparent = parent;
-    goto done;
-  done:
-    return result;
-}
-*/
-
-static
-int
-btree_node_synch(struct file *f, struct btree_node *node)
-{
-    assert(f != NULL);
-    assert(node != NULL);
-    assert(node->bt_header.bth_page != BTREE_PAGE_NULL);
-    return file_write(f, node->bt_header.bth_page, node);
-}
-
-static
-int
-btree_insert_entry(struct file *f,
-                   struct btree_node *current,
-                   struct btree_entry *entry)
-{
-    assert(current != NULL);
-    unsigned nentries = current->bt_header.bth_nentries;
-    assert(nentries < BTENTRY_PER_PAGE);
-
-    unsigned ix = binary_search(entry, current->bt_entries, nentries,
-                                sizeof(struct btree_entry),
-                                btree_entry_compare);
-    if (ix < nentries) {
-        // memmove allows overlapping regions
-        memmove(&current->bt_entries[ix + 1], &current->bt_entries[ix],
-                sizeof(struct btree_entry) * (nentries - ix));
-    }
-    current->bt_entries[ix] = *entry;
-    current->bt_header.bth_nentries++;
-    return btree_node_synch(f, current);
-}
-
-// Inserts the entry into current
-// If a split occurred, returns a new entry and a pointer to the node
-// that needs to be fixed
-static
-int
-btree_insert_helper(struct file *f,
-                    struct btree_node *current,
-                    struct btree_entry *entry,
-                    struct btree_entry *retentry)
-{
-    (void) column_select_btree_range;
-    (void) btree_search;
-    assert(f != NULL);
-    assert(current != NULL);
-    assert(entry != NULL);
-    assert(retentry != NULL);
-
-    int result = 0;
-    struct btree_entry entrybuf;
-    bzero(&entrybuf, sizeof(struct btree_entry));
-    struct btree_node nodebuf;
-    bzero(&nodebuf, sizeof(struct btree_node));
-
-    // If we have an internal node, recurse down until we can insert entry.
-    // Each invocation will possibly propagate up to the caller a new
-    // entry to insert into the current node.
-    if (current->bt_header.bth_type == BTREE_NODE_INTERNAL) {
-        assert(current->bt_header.bth_nentries != 0);
-        unsigned ix = binary_search(entry,
-                                    current->bt_entries,
-                                    current->bt_header.bth_nentries,
-                                    sizeof(struct btree_entry),
-                                    btree_entry_compare);
-        page_t pchild;
-        if (ix == 0) { // chase left pointer
-            pchild = current->bt_header.bth_left;
-        } else { // chase ix - 1 pointer
-            pchild = current->bt_entries[ix - 1].bte_page;
-        }
-        assert(pchild != BTREE_PAGE_NULL);
-        result = file_read(f, pchild, &nodebuf);
-        assert(result == 0);
-        bzero(&entrybuf, sizeof(struct btree_entry));
-        result = btree_insert_helper(f, &nodebuf, entry, &entrybuf);
-        assert(result == 0);
-
-        // If we get a new entry, it must be an entry pointing to
-        // a new page. Therefore, if we get NULL, we're done
-        if (entrybuf.bte_page == BTREE_PAGE_NULL) {
-            goto success;
-        }
-        // Otherwise, we need to insert the new entry into the current node
-        entry = &entrybuf;
-    }
-
-    // If we have space in this node, insert it.
-    unsigned nentries = current->bt_header.bth_nentries;
-    if (nentries < BTENTRY_PER_PAGE) {
-        result = btree_insert_entry(f, current, entry);
-        assert(result == 0);
-        goto success;
-    }
-
-    // Otherwise, we need to split and copy half the entries to the new node.
-    bzero(&nodebuf, sizeof(struct btree_node));
-    page_t newpage;
-    result = file_alloc_page(f, &newpage);
-    assert(result == 0);
-    unsigned halfix = nentries / 2;
-    nodebuf.bt_header.bth_type = current->bt_header.bth_type;
-    nodebuf.bt_header.bth_page = newpage;
-    current->bt_header.bth_nentries = halfix;
-    struct btree_entry *base;
-    switch (current->bt_header.bth_type) {
-    case BTREE_NODE_LEAF:
-        nodebuf.bt_header.bth_nentries = nentries - halfix;
-        nodebuf.bt_header.bth_next = current->bt_header.bth_next;
-        current->bt_header.bth_next = newpage;
-        base = &nodebuf.bt_entries[halfix];
-        break;
-    case BTREE_NODE_INTERNAL:
-        // one of the entries from current becomes the left pointer
-        // in the new node
-        nodebuf.bt_header.bth_nentries = (nentries - halfix) - 1;
-        nodebuf.bt_header.bth_left = current->bt_entries[halfix].bte_page;
-        base = &nodebuf.bt_entries[halfix + 1];
-        break;
-    default:
-        assert(0);
-        break;
-    }
-    size_t bytes_tocopy =
-            sizeof(struct btree_entry) * nodebuf.bt_header.bth_nentries;
-    memcpy(&nodebuf.bt_entries, base, bytes_tocopy);
-    bzero(base, bytes_tocopy);
-
-    // If the entry to be inserted is geq than the smallest key
-    // in the new right node, the entry should be inserted into that node.
-    if (btree_entry_compare(entry, &nodebuf.bt_entries[0]) >= 0) {
-        result = btree_insert_entry(f, &nodebuf, entry);
-        assert(result == 0);
-    } else {
-        result = btree_insert_entry(f, current, entry);
-        assert(result == 0);
-    }
-
-    // Now we need to synch all the changes in the current and new nodes
-    result = btree_node_synch(f, &nodebuf);
-    assert(result == 0);
-    result = btree_node_synch(f, current);
-    assert(result == 0);
-
-    // Propagate the new entry back to the caller to be inserted into the
-    // parent node.
-    bzero(&entrybuf, sizeof(struct btree_entry));
-    entrybuf.bte_key = nodebuf.bt_entries[0].bte_key;
-    entrybuf.bte_page = newpage;
-    goto success;
-
-  success:
-    result = 0;
-    *retentry = entrybuf;
-    goto done;
-  done:
-    return result;
-}
-
-// PRECONDITION: must be holding lock on column
-static
-int
-btree_insert(struct column *col, struct btree_entry *entry)
-{
-    assert(col != NULL);
-    assert(entry != NULL);
-
-    int result;
-    page_t newrootpage;
-    struct btree_entry entrybuf;
-    bzero(&entrybuf, sizeof(struct btree_entry));
-    struct btree_node rootbuf;
-    result = file_read(col->col_index_file,
-                       col->col_disk.cd_btree_root, &rootbuf);
-    assert(result == 0);
-
-    result = btree_insert_helper(col->col_index_file, &rootbuf, entry,
-                                 &entrybuf);
-    assert(result == 0);
-
-    // If after insertion, our current does not have a sibling, we're done
-    if (entrybuf.bte_page == BTREE_PAGE_NULL) {
-        newrootpage = col->col_disk.cd_btree_root;
-        goto success;
-    }
-
-    // If we do have a sibling, we need to create a new internal parent node.
-    // The left pointer of the new parent node will be the current node,
-    // and the first entry of the new parent node will tbe the returned
-    // entry which contains a pointer to the sibling node.
-    struct btree_node nodebuf;
-    bzero(&nodebuf, sizeof(struct btree_node));
-    page_t newpage;
-    result = file_alloc_page(col->col_index_file, &newpage);
-    assert(result == 0);
-    nodebuf.bt_header.bth_type = BTREE_NODE_INTERNAL;
-    nodebuf.bt_header.bth_nentries = 1;
-    nodebuf.bt_header.bth_page = newpage;
-    nodebuf.bt_header.bth_left = rootbuf.bt_header.bth_page;
-    nodebuf.bt_entries[0] = entrybuf;
-    result = btree_node_synch(col->col_index_file, &nodebuf);
-    assert(result == 0);
-    newrootpage = newpage;
-    goto success;
-
-  success:
-    result = 0;
-    col->col_disk.cd_btree_root = newrootpage;
-    col->col_disk.cd_ntuples++;
-    col->col_dirty = true;
-    goto done;
-  done:
-    return result;
-}
-
-/*
-// PRECONDITION: must be holding lock on column
-static
-int
-column_load_index_btree(struct file *f, int *vals, uint64_t num)
-{
-    // TODO
-    // convert vals -> array of btree_entry's
-    // create array of btree_nodes
-    // copy btree_entry's into leaf node pages, update metadata
-    // store internal nodes in resizable array
-    // keep special root node out of resizable array
-    // merge two btrees ->
-    // void merge(btree *left, btree *right, btree **parent)
-    //   set parent to be new root (parent == left if no merging needed
-    //   to happen
-    // get a btree at the end of the day
-    // need to traverse tree and write all the data to disk
-    (void) column_search_btree;
-    (void) column_select_btree_range;
-    (void) btree_entry_compare;
-
-    assert(f != NULL);
-    assert(vals != NULL);
-
-    // Create our sorted entries
-    int result;
-    struct btree_entry *entries = malloc(sizeof(int) * num);
-    if (entries != NULL) {
-        result = -1;
-        goto done;
-    }
-    bzero(entries, sizeof(struct btree_entry) * num);
-    for (uint64_t i = 0; i < num; i++) {
-        entries[i].bte_key = vals[i];
-        entries[i].bte_index = i;
-    }
-    qsort(entries, num, sizeof(struct btree_entry), btree_entry_compare);
-
-    // Allocate page numbers for these new leaf pages and assign it in metadata
-    unsigned nleafnodes = (num + BTENTRY_PER_PAGE - 1) / BTENTRY_PER_PAGE;
-    page_t *leafpnums = malloc(sizeof(page_t) * nleafnodes);
-    if (leafpnums == NULL) {
-        result = -1;
-        goto cleanup_entries;
-    }
-    bzero(leafpnums, sizeof(page_t) * nleafnodes);
-    for (unsigned i = 0; i < nleafnodes; i++) {
-        result = file_alloc_page(f, &leafpnums[i]);
-        if (result) {
-            goto cleanup_leafpnums;
-        }
-    }
-
-    // Now create our leaf nodes, take ceiling
-    struct btree_node *nodes = malloc(sizeof(struct btree_node) * nleafnodes);
-    if (nodes == NULL) {
-        result = -1;
-        goto cleanup_leafpnums;
-    }
-    bzero(nodes, sizeof(struct btree_node) * nleafnodes);
-    for (uint64_t i = 0; i < num; i += BTENTRY_PER_PAGE) {
-        uint64_t ntuples = MIN(BTENTRY_PER_PAGE, num - i);
-        nodes[i].bt_header.bth_type = BTREE_NODE_LEAF;
-        nodes[i].bt_header.bth_nentries = ntuples;
-        memcpy(nodes[i].bt_entries, entries + i,
-               ntuples * sizeof(struct btree_entry));
-        nodes[i].bt_header.bth_page = leafpnums[i];
-    }
-    for (unsigned i = 0; i < nleafnodes - 1; i++) {
-        nodes[i].bt_header.bth_next = leafpnums[i + 1];
-    }
-    nodes[nleafnodes - 1].bt_header.bth_next = BTREE_PAGE_NULL;
-
-    // when we write out to disk, make sure the root page is at FILE_FIRST_PAGE
-    // copy whatever currently is at FILE_FIRST_PAGE to a new page
-
-    result = 0;
-    goto cleanup_entries;
-  cleanup_leafnodes:
-    free(nleafnodes);
-  cleanup_leafpnums:
-    for (unsigned i = 0; i < nleafnodes; i++) {
-        page_t page = leafpnums[i];
-        if (page != 0) {
-            file_free_page(f, page);
-        }
-    }
-    free(leafpnums);
-  cleanup_entries:
-    free(entries);
-  done:
-    return result;
-}
-*/
 
 static
 int
