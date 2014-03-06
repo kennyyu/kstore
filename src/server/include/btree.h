@@ -5,8 +5,15 @@
 #include "file.h"
 #include "../../common/include/cassert.h"
 
+// INVARIANTS
+// * Allow nodes to be less than half full
+// * left pointer of node allows for values x such that x <= min(node)
+// * pointer in an entrie allows for values x such that val <= x
+// * Allow duplicates in internal nodes
+
 // location of the root page
 #define BTREE_ROOT_PAGE FILE_FIRST_PAGE
+#define BTREE_PAGE_NULL 0
 
 enum btree_node_type {
     BTREE_NODE_INTERNAL,
@@ -31,6 +38,8 @@ struct btree_header {
         page_t bth_next; // used for LEAF nodes
         page_t bth_left; // used for INTERNAL nodes
     };
+    uint64_t bth_page; // page this node lives on
+    uint64_t bth_padding; // padding
 };
 
 CASSERT(sizeof(struct btree_header) % sizeof(struct btree_entry) == 0);

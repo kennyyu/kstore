@@ -906,6 +906,7 @@ column_load_index_sorted(struct file *f, int *vals, uint64_t num)
     struct column_entry_sorted *entries =
             malloc(num * sizeof(struct column_entry_sorted));
     if (entries == NULL) {
+        result = -1;
         goto done;
     }
     for (uint64_t i = 0; i < num; i++) {
@@ -979,6 +980,243 @@ column_search_btree(struct column *col, int val,
     return 0;
 }
 
+// Merge the two btrees.
+// The right tree MUST be a LEAF node
+// Return a pointer to the new parent of the tree, which can possibly
+// bee left.
+/*
+static
+int
+btree_merge(struct file *f, struct btree_node *left, struct btree_node *right,
+            struct btree_node **retparent)
+{
+    assert(left != NULL);
+    assert(right != NULL);
+    assert(left != right);
+    assert(retparent != NULL);
+    assert(right->bt_header.bth_type == BTREE_NODE_LEAF);
+    assert(right->bt_header.bth_nentries != 0);
+    int result;
+    struct btree_node *parent = NULL;
+    struct btree_entry *rightent = &right->bt_entries;
+
+    // handle special case when left is a LEAF
+    // the key in the parent node must be 1 + max(leaf node)
+    if (left->bt_header.bth_type == BTREE_NODE_LEAF) {
+        // need to allocate parent node
+        parent = malloc(sizeof(struct btree_node));
+        if (parent == NULL) {
+            result = -1;
+        }
+        parent->bt_header.bth_type = BTREE_NODE_INTERNAL;
+        parent->bt_header.bth_left = left;
+        parent->bt_header.bth_nentries = 1;
+        parent->bt_entries[0].bte_key = rightent->bte_key;
+        parent->bt_entries[0].bte_page =
+        // handle root page
+    }
+
+    // Do a binary search to find the lower bound on where
+    // the min value of the right node should go in the left node.
+    unsigned index = binary_search(rightent, left->bt_entries,
+                                   left->bt_header.bth_nentries,
+                                   sizeof(struct btree_entry),
+                                   btree_entry_compare);
+    if (index == 0) {
+
+    }
+
+    // Compare the keys
+  success:
+    result = 0;
+    *retparent = parent;
+    goto done;
+  done:
+    return result;
+}
+*/
+
+static
+int
+btree_node_synch(struct file *f, struct btree_node *node)
+{
+    assert(f != NULL);
+    assert(node != NULL);
+    assert(node->bt_header.bth_page != BTREE_PAGE_NULL);
+    return file_write(f, node->bt_header.bth_page, node);
+}
+
+static
+int
+btree_insert_entry(struct file *f,
+                   struct btree_node *current,
+                   struct btree_entry *entry)
+{
+    assert(current != NULL);
+    unsigned nentries = current->bt_header.bth_nentries;
+    assert(nentries < BTENTRY_PER_PAGE);
+
+    unsigned ix = binary_search(entry, current->bt_entries, nentries,
+                                sizeof(struct btree_entry),
+                                btree_entry_compare);
+    if (ix < nentries) {
+        // memmove allows overlapping regions
+        memmove(&current->bt_entries[ix + 1], &current->bt_entries[ix],
+                sizeof(struct btree_entry) * (nentries - ix));
+    }
+    current->bt_entries[ix] = *entry;
+    current->bt_header.bth_nentries++;
+    return btree_node_synch(f, &right);
+}
+
+// Inserts the entry into current
+// If a split occurred, returns a new entry and a pointer to the node
+// that needs to be fixed
+//
+static
+int
+btree_insert_helper(struct file *f,
+                    struct btree_node *current,
+                    struct btree_entry *entry,
+                    struct btree_entry *retentry)
+{
+    assert(f != NULL);
+    assert(current != NULL);
+    assert(entry != NULL);
+    assert(retentry != NULL);
+
+    int result;
+    struct btree_entry newentry;
+    bzero(newentry, sizeof(struct btree_entry));
+
+    if (current->bt_header.bth_type == BTREE_NODE_LEAF) {
+        unsigned nentries = current->bt_header.bth_nentries;
+        if (nentries < BTENTRY_PER_PAGE) {
+            result = btree_insert_entry(current, entry);
+            assert(result == 0);
+            goto success;
+        }
+        // Otherwise we need to split and copy half the entries to the new node
+        struct btree_node right;
+        bzero(right, sizeof(struct btree_node));
+        page_t rightpage;
+        result = file_alloc_page(f, &rightpage);
+        assert(result == 0);
+
+        // Propagate this new node to the caller.
+        // The caller is reponsible for inserting this new entry into the
+        // parent
+        unsigned halfix = nentries / 2;
+        right.bt_header.bth_type = BTREE_NODE_LEAF;
+        right.bt_header.bth_nentries = (nentries - halfix);
+        right.bt_header.bth_page = rightpage;
+        right.bt_header.bth_next = current->bt_header.bth_next;
+        current->bt_header.bth_next = rightpage;
+        current->bt_header.bth_nentries = halfix;
+        size_t bytes_tocopy =
+                sizeof(struct btree_entry) * (BTENTRY_PER_PAGE - halfix);
+        memcpy(right->bt_entries, &current->bt_entries[halfix], bytes_tocopy);
+        bzero(&current->bt_entries[halfix], bytes_tocopy);
+        if (btree_entry_compare(entry, &right->bt_entries[0]) >= 0) {
+            result = btree_insert_entry(f, &right, entry);
+            assert(result == 0);
+        } else {
+            result = btree_insert_entry(f, current, entry);
+            assert(result == 0);
+        }
+        result = btree_node_synch(f, &right);
+        assert(result == 0);
+        newentry.bte_key = right.bt_entries[0].bte_index;
+        newentry.bte_page = rightpage;
+        goto success;
+    } else if (current->bt_header.bth_type == BTREE_NODE_INTERNAL) {
+        assert(current->bt_header.bth_nentries != 0);
+        unsigned ix = binary_search(entry,
+                                    current->bt_header.bth_nentries,
+                                    sizeof(struct btree_entry),
+                                    btree_entry_compare);
+        page_t pchild;
+        if (ix == 0) {
+            // chase left pointer
+            pchild = current->bt_header.bth_left;
+        } else {
+            // chase ix - 1 pointer
+            pchild = current->bt_entries[ix - 1].bte_page;
+        }
+        assert(pchild != 0);
+        struct btree_node nodebuf;
+        result = file_read(f, pchild, &nodebuf);
+        assert(result == 0);
+        struct btree_entry recurentry;
+        bzero(recurentry, sizeof(struct btree_entry));
+        result = btree_insert_helper(f, &nodebuf, entry, &recurentry);
+        assert(result == 0);
+
+        // If we get a new entry, it must be an entry pointing to
+        // a new page. Therefore, if we get NULL, we're done
+        if (recurentry.bte_page == BTREE_PAGE_NULL) {
+            goto success;
+        }
+        // handle repairing the tree and setting newentry
+        unsigned nentries = current->bt_header.bth_nentries;
+        if (nentries < BTENTRY_PER_PAGE) {
+            result = btree_insert_entry(f, current, &recurentry);
+            assert(result == 0);
+            goto success;
+        }
+        // otherwise we need to split this internal node
+        bzero(nodebuf, sizeof(struct btree_node));
+        page_t rightpage;
+        result = file_alloc_page(f, &rightpage);
+        assert(result == 0);
+
+        // the half pointer bcomes the new left pointer of the new internal
+        // node
+        unsigned half = nentries / 2;
+        nodebuf.bt_header.bth_type = BTREE_NODE_INTERNAL;
+        nodebuf.bt_header.bth_page = rightpage;
+        // one of the entries becomes the left pointer
+        nodebuf.bt_header.bth_nentries = (nentries - half) - 1;
+        nodebuf.bt_header.bth_left = current->bt_entries[half].bte_page;
+        current->bt_header.bth_nentries = half;
+        size_t bytes_tocopy =
+                sizeof(struct btree_node) * nodebuf.bt_header.bth_nentries;
+        memcpy(nodebuf.bt_entries, &current->bt_entries[half + 1],
+               bytes_tocopy);
+        bzero(&current->bt_entries[half + 1], bytes_tocopy);
+        if (btree_entry_compare(recurentry, &nodebuf) >= 0) {
+            result = btree_insert_entry(f, nodebuf, recurentry);
+            assert(result == 0);
+        } else {
+            result = btree_insert_entry(f, current, recurentry);
+            assert(result == 0);
+        }
+        result = btree_node_synch(f, nodebuf);
+        assert(result == 0);
+        newentry.bte_key = nodebuf.bt_entries[0].bte_index;
+        newentry.bte_page = rightpage;
+        goto success;
+    }
+
+  success:
+    result = 0;
+    *retentry = newentry;
+  done:
+    return result;
+}
+
+static
+int
+btree_insert(struct file *f,
+             struct btree_node *current,
+             struct btree_entry *entry,
+             struct btree_node **retroot)
+{
+    // need to repair tree with retnode and retentry
+    // set retroot
+    // TODO: put location of root page somewhere
+}
+
 // PRECONDITION: must be holding lock on column
 static
 int
@@ -1007,6 +1245,7 @@ column_load_index_btree(struct file *f, int *vals, uint64_t num)
     int result;
     struct btree_entry *entries = malloc(sizeof(int) * num);
     if (entries != NULL) {
+        result = -1;
         goto done;
     }
     bzero(entries, sizeof(struct btree_entry) * num);
@@ -1016,13 +1255,56 @@ column_load_index_btree(struct file *f, int *vals, uint64_t num)
     }
     qsort(entries, num, sizeof(struct btree_entry), btree_entry_compare);
 
-    // Now create our leaf nodes
-    unsigned nleafnodes = 1 + num / BTENTRY_PER_PAGE;
-    (void)nleafnodes;
+    // Allocate page numbers for these new leaf pages and assign it in metadata
+    unsigned nleafnodes = (num + BTENTRY_PER_PAGE - 1) / BTENTRY_PER_PAGE;
+    page_t *leafpnums = malloc(sizeof(page_t) * nleafnodes);
+    if (leafpnums == NULL) {
+        result = -1;
+        goto cleanup_entries;
+    }
+    bzero(leafpnums, sizeof(page_t) * nleafnodes);
+    for (unsigned i = 0; i < nleafnodes; i++) {
+        result = file_alloc_page(f, &leafpnums[i]);
+        if (result) {
+            goto cleanup_leafpnums;
+        }
+    }
 
+    // Now create our leaf nodes, take ceiling
+    struct btree_node *nodes = malloc(sizeof(struct btree_node) * nleafnodes);
+    if (nodes == NULL) {
+        result = -1;
+        goto cleanup_leafpnums;
+    }
+    bzero(nodes, sizeof(struct btree_node) * nleafnodes);
+    for (uint64_t i = 0; i < num; i += BTENTRY_PER_PAGE) {
+        uint64_t ntuples = MIN(BTENTRY_PER_PAGE, num - i);
+        nodes[i].bt_header.bth_type = BTREE_NODE_LEAF;
+        nodes[i].bt_header.bth_nentries = ntuples;
+        memcpy(nodes[i].bt_entries, entries + i,
+               ntuples * sizeof(struct btree_entry));
+        nodes[i].bt_header.bth_page = leafpnums[i];
+    }
+    for (unsigned i = 0; i < nleafnodes - 1; i++) {
+        nodes[i].bt_header.bth_next = leafpnums[i + 1];
+    }
+    nodes[nleafnodes - 1].bt_header.bth_next = BTREE_PAGE_NULL;
+
+    // when we write out to disk, make sure the root page is at FILE_FIRST_PAGE
+    // copy whatever currently is at FILE_FIRST_PAGE to a new page
 
     result = 0;
     goto cleanup_entries;
+  cleanup_leafnodes:
+    free(nleafnodes);
+  cleanup_leafpnums:
+    for (unsigned i = 0; i < nleafnodes; i++) {
+        page_t page = leafpnums[i];
+        if (page != 0) {
+            file_free_page(f, page);
+        }
+    }
+    free(leafpnums);
   cleanup_entries:
     free(entries);
   done:
