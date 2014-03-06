@@ -20,9 +20,11 @@ do
     mine="$TMP/$base.me"
     ./client < $t > $mine
     results=`diff $expected $mine`
-    echo $t
     if [ $results ]
     then
-        echo $results
+        echo "[FAIL] $t"
+        echo "       $results"
+    else
+        echo "[PASS] $t"
     fi
 done
