@@ -31,10 +31,18 @@ parse_stdin(int readfd, int writefd)
     int result;
     char buf[BUFSIZE];
     bzero(buf, BUFSIZE);
-    result = read(readfd, buf, BUFSIZE); // read at most BUFSIZE
-    if (result == -1 || result == 0) {
-        result = -1;
-        goto done;
+    result = 0;
+    unsigned ix = 0;
+    while (1) {
+        result = read(readfd, buf + ix, 1);
+        if (result == -1 || result == 0) {
+            result = -1;
+            goto done;
+        }
+        ix++;
+        if (buf[ix-1] == '\n' || buf[ix-1] == '\0') {
+            break;
+        }
     }
     struct oparray *ops = parse_query(buf);
     if (ops == NULL) {

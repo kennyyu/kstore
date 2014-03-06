@@ -230,15 +230,15 @@ server_eval_select(struct server_jobctx *jobctx, struct op *op)
         }
         should_cleanup_vtuple_on_err = true;
         strcpy(vtuple->vt_var, op->op_select.op_sel_var);
+        result = vartuplearray_add(jobctx->sj_env, vtuple, NULL);
+        if (result) {
+            goto cleanup_vartuple;
+        }
     } else {
         // need to destroy the old column ids before reassigning
         column_ids_destroy(vtuple->vt_column_ids);
     }
     vtuple->vt_column_ids = ids;
-    result = vartuplearray_add(jobctx->sj_env, vtuple, NULL);
-    if (result) {
-        goto cleanup_vartuple;
-    }
 
     // success
     result = 0;
