@@ -466,7 +466,8 @@ btree_select_range(struct column *col,
 
     page_t curpage = pleft;
     unsigned curix = ixleft;
-    while ((curpage != pright) && (curix != ixright)) {
+    while (!((curpage != pright) && (curix != ixright))) {
+        assert(curpage != BTREE_PAGE_NULL);
         result = file_read(col->col_index_file, curpage, &nodebuf);
         if (result) {
             goto done;
@@ -481,7 +482,6 @@ btree_select_range(struct column *col,
             bitmap_mark(cids->cid_bitmap, entry->bte_index);
         }
         curpage = nodebuf.bt_header.bth_next;
-        assert(curpage != BTREE_PAGE_NULL);
         curix = 0;
     }
 
@@ -514,7 +514,7 @@ btree_search(struct column *col, int val,
             goto done;
         }
         unsigned ix = binary_search(&target, &nodebuf.bt_entries,
-                                    BTENTRY_PER_PAGE,
+                                    nodebuf.bt_header.bth_nentries,
                                     sizeof(struct btree_entry),
                                     btree_entry_compare);
         switch (nodebuf.bt_header.bth_type) {
@@ -1344,6 +1344,8 @@ column_load_index_btree(struct column *col, int *vals, uint64_t num)
         goto done;
     }
     assert(rootpage != BTREE_PAGE_NULL);
+    col->col_disk.cd_btree_root = rootpage;
+
     struct btree_node root;
     bzero(&root, sizeof(struct btree_node));
     root.bt_header.bth_type = BTREE_NODE_LEAF;
