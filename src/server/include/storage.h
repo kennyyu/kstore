@@ -18,10 +18,11 @@
 // these will be stored in the metadata file pointed to by storage
 // this MUST divide PAGESIZE
 struct column_on_disk {
-    char cd_col_name[128]; // name of this column
+    char cd_col_name[120]; // name of this column
     uint64_t cd_ntuples; // number of tuples in this column
     uint32_t cd_stype; // enum storage_type
     uint32_t cd_magic; // magic value for debugging
+    page_t cd_btree_root; // location of btree root
     char cd_base_file[56]; // file where data is stored, does not include dbdir
     char cd_index_file[56]; // file where index is stored, does not include dbdir
 };

@@ -222,6 +222,7 @@ storage_add_column(struct storage *storage, char *colname,
     newcol.cd_ntuples = 0;
     newcol.cd_magic = COLUMN_TAKEN;
     newcol.cd_stype = stype;
+    newcol.cd_btree_root = BTREE_PAGE_NULL;
 
     // create a file to store the column data
     char filenamebuf[56];
@@ -971,13 +972,26 @@ column_select_btree_range(struct column *col,
 // PRECONDITION: must be holding lock on column
 static
 int
-column_search_btree(struct column *col, int val,
-                    page_t *retpage, unsigned *retindex)
+btree_search(struct column *col, int val,
+             page_t *retpage, unsigned *retindex)
 {
     // TODO
     // Binary search the current node
     // chase pointer.
-    return 0;
+    int result;
+    page_t targetpage = BTREE_PAGE_NULL;
+    unsigned targetindex = 0;
+
+    //struct btree_node nodebuf;
+
+    // success
+    result = 0;
+    assert(targetpage != BTREE_PAGE_NULL);
+    *retpage = targetpage;
+    *retindex = targetindex;
+    goto done;
+  done:
+    return result;
 }
 
 // Merge the two btrees.
@@ -1080,7 +1094,7 @@ btree_insert_helper(struct file *f,
                     struct btree_entry *retentry)
 {
     (void) column_select_btree_range;
-    (void) column_search_btree;
+    (void) btree_search;
     assert(f != NULL);
     assert(current != NULL);
     assert(entry != NULL);
@@ -1196,32 +1210,30 @@ btree_insert_helper(struct file *f,
     return result;
 }
 
+// PRECONDITION: must be holding lock on column
 static
 int
-btree_insert(struct file *f,
-             page_t rootpage,
-             struct btree_entry *entry,
-             page_t *retrootpage)
+btree_insert(struct column *col, struct btree_entry *entry)
 {
-    assert(f != NULL);
+    assert(col != NULL);
     assert(entry != NULL);
-    assert(retrootpage != NULL);
-    assert(rootpage != BTREE_PAGE_NULL);
 
     int result;
     page_t newrootpage;
     struct btree_entry entrybuf;
     bzero(&entrybuf, sizeof(struct btree_entry));
     struct btree_node rootbuf;
-    result = file_read(f, rootpage, &rootbuf);
+    result = file_read(col->col_index_file,
+                       col->col_disk.cd_btree_root, &rootbuf);
     assert(result == 0);
 
-    result = btree_insert_helper(f, &rootbuf, entry, &entrybuf);
+    result = btree_insert_helper(col->col_index_file, &rootbuf, entry,
+                                 &entrybuf);
     assert(result == 0);
 
     // If after insertion, our current does not have a sibling, we're done
     if (entrybuf.bte_page == BTREE_PAGE_NULL) {
-        newrootpage = rootpage;
+        newrootpage = col->col_disk.cd_btree_root;
         goto success;
     }
 
@@ -1232,21 +1244,23 @@ btree_insert(struct file *f,
     struct btree_node nodebuf;
     bzero(&nodebuf, sizeof(struct btree_node));
     page_t newpage;
-    result = file_alloc_page(f, &newpage);
+    result = file_alloc_page(col->col_index_file, &newpage);
     assert(result == 0);
     nodebuf.bt_header.bth_type = BTREE_NODE_INTERNAL;
     nodebuf.bt_header.bth_nentries = 1;
     nodebuf.bt_header.bth_page = newpage;
     nodebuf.bt_header.bth_left = rootbuf.bt_header.bth_page;
     nodebuf.bt_entries[0] = entrybuf;
-    result = btree_node_synch(f, &nodebuf);
+    result = btree_node_synch(col->col_index_file, &nodebuf);
     assert(result == 0);
     newrootpage = newpage;
     goto success;
 
   success:
     result = 0;
-    *retrootpage = newrootpage;
+    col->col_disk.cd_btree_root = newrootpage;
+    col->col_disk.cd_ntuples++;
+    col->col_dirty = true;
     goto done;
   done:
     return result;
@@ -1350,47 +1364,48 @@ column_load_index_btree(struct file *f, int *vals, uint64_t num)
 
 static
 int
-column_load_index_btree(struct file *f, int *vals, uint64_t num)
+column_load_index_btree(struct column *col, int *vals, uint64_t num)
 {
-    assert(f != NULL);
+    assert(col->col_index_file != NULL);
     assert(vals != NULL);
+    assert(col->col_disk.cd_ntuples == 0);
+    assert(col->col_disk.cd_btree_root == BTREE_PAGE_NULL);
     int result;
 
     // Create a page for the root node.
     // The first time we load, it's going to be a leaf node with 0 entries
     page_t rootpage;
-    result = file_alloc_page(f, &rootpage);
+    result = file_alloc_page(col->col_index_file, &rootpage);
     if (result) {
         goto done;
     }
+    assert(rootpage != BTREE_PAGE_NULL);
     struct btree_node root;
     bzero(&root, sizeof(struct btree_node));
     root.bt_header.bth_type = BTREE_NODE_LEAF;
     root.bt_header.bth_next = BTREE_PAGE_NULL;
     root.bt_header.bth_page = rootpage;
     root.bt_header.bth_nentries = 0;
-    result = btree_node_synch(f, &root);
+    result = btree_node_synch(col->col_index_file, &root);
     if (result) {
         goto cleanup_page;
     }
 
     // Now insert all the tuples one by one
-    page_t newrootpage;
     for (uint64_t i = 0; i < num; i++) {
         struct btree_entry entry;
         bzero(&entry, sizeof(struct btree_entry));
         entry.bte_key = vals[i];
         entry.bte_index = i;
-        result = btree_insert(f, rootpage, &entry, &newrootpage);
+        result = btree_insert(col, &entry);
         assert(result == 0);
-        rootpage = newrootpage;
     }
 
     // success
     result = 0;
     goto done;
   cleanup_page:
-    file_free_page(f, rootpage);
+    file_free_page(col->col_index_file, rootpage);
   done:
     return result;
 }
@@ -1412,19 +1427,21 @@ column_load(struct column *col, int *vals, uint64_t num)
     result = column_load_unsorted(col->col_base_file, vals, num);
     switch (col->col_disk.cd_stype) {
     case STORAGE_BTREE:
-        result = column_load_index_btree(col->col_index_file, vals, num);
+        result = column_load_index_btree(col, vals, num);
         break;
     case STORAGE_SORTED:
         result = column_load_index_sorted(col->col_index_file, vals, num);
+        col->col_disk.cd_ntuples += num;
+        col->col_dirty = true;
         break;
     case STORAGE_UNSORTED:
+        col->col_disk.cd_ntuples += num;
+        col->col_dirty = true;
         break;
     default:
         assert(0);
         break;
     }
-    col->col_disk.cd_ntuples += num;
-    col->col_dirty = true;
     goto done;
 
   done:
