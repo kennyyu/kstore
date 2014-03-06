@@ -82,6 +82,10 @@ char *op_string(struct op *op) {
                 op->op_insert.op_insert_col,
                 op->op_insert.op_insert_val);
         break;
+    case OP_TUPLE:
+        sprintf(buf, "tuple(%s)",
+                op->op_tuple.op_tuple_vars);
+        break;
     default: assert(0); return NULL;
     }
 

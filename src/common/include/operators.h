@@ -14,12 +14,17 @@ enum op_type {
     OP_CREATE,
     OP_LOAD,
     OP_INSERT,
+    OP_TUPLE,
 };
 
 enum storage_type {
     STORAGE_SORTED,
     STORAGE_UNSORTED,
     STORAGE_BTREE,
+};
+
+struct op_tuple {
+    char op_tuple_vars[COLUMNLEN];
 };
 
 // struct for all the select queries
@@ -64,6 +69,7 @@ struct op {
         struct op_create op_create;
         struct op_load op_load;
         struct op_insert op_insert;
+        struct op_tuple op_tuple;
     };
 };
 

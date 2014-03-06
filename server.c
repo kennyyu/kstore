@@ -40,6 +40,7 @@ sigint_handler(int sig)
 // result of selects
 struct vartuple {
     char vt_var[128];
+    char vt_col[64];
     struct column_ids *vt_column_ids;
 };
 
@@ -238,6 +239,7 @@ server_eval_select(struct server_jobctx *jobctx, struct op *op)
         // need to destroy the old column ids before reassigning
         column_ids_destroy(vtuple->vt_column_ids);
     }
+    strcpy(vtuple->vt_col, col->col_disk.cd_col_name);
     vtuple->vt_column_ids = ids;
 
     // success
@@ -342,6 +344,73 @@ server_eval_create(struct server_jobctx *jobctx, struct op *op)
     return result;
 }
 
+DECLARRAY(column_vals);
+DEFARRAY(column_vals, /* no inline */);
+
+static
+int
+server_eval_tuple(struct server_jobctx *jobctx, struct op *op)
+{
+    assert(jobctx != NULL);
+    assert(op != NULL);
+    assert(op->op_type == OP_TUPLE);
+
+    int result;
+    struct column_valsarray *tuples = column_valsarray_create();
+    if (tuples == NULL) {
+        result = -1;
+        goto done;
+    }
+    const char *delimiters = ",";
+    char *pch;
+    char *saveptr;
+    pch = strtok_r((char *) op->op_tuple.op_tuple_vars, delimiters, &saveptr);
+    while (pch != NULL) {
+        // Get the variable result
+        struct vartuple *v = server_eval_get_var(jobctx->sj_env, pch);
+        if (v == NULL) {
+            result = -1;
+            goto cleanup_valsarray;
+        }
+        // Fetch the values for this column
+        struct column *col = column_open(jobctx->sj_storage, v->vt_col);
+        if (col == NULL) {
+            result = -1;
+            goto cleanup_valsarray;
+        }
+        struct column_vals *cvals = column_fetch(col, v->vt_column_ids);
+        if (cvals == NULL) {
+            column_close(col);
+            goto cleanup_valsarray;
+        }
+        result = column_valsarray_add(tuples, cvals, NULL);
+        if (result) {
+            column_vals_destroy(cvals);
+            column_close(col);
+            goto cleanup_valsarray;
+        }
+        column_close(col);
+        pch = strtok_r(NULL, delimiters, &saveptr);
+    }
+    result = rpc_write_tuple_result(jobctx->sj_fd,
+                                    (struct column_vals **) tuples->arr.v,
+                                    tuples->arr.num);
+    if (result) {
+        goto cleanup_valsarray;
+    }
+
+    result = 0;
+    goto cleanup_valsarray;
+  cleanup_valsarray:
+    while (column_valsarray_num(tuples) > 0) {
+        column_vals_destroy(column_valsarray_get(tuples, 0));
+        column_valsarray_remove(tuples, 0);
+    }
+    column_valsarray_destroy(tuples);
+  done:
+    return result;
+}
+
 static
 int
 server_eval(struct server_jobctx *jobctx, struct op *op)
@@ -364,6 +433,8 @@ server_eval(struct server_jobctx *jobctx, struct op *op)
         return server_eval_load(jobctx, op);
     case OP_INSERT:
         return server_eval_insert(jobctx, op);
+    case OP_TUPLE:
+        return server_eval_tuple(jobctx, op);
     default:
         assert(0);
         return -1;

@@ -218,6 +218,75 @@ rpc_write_file(int fd, struct op *op)
 }
 
 int
+rpc_write_tuple_result(int fd, struct column_vals **tuples, unsigned len)
+{
+    assert(tuples != NULL);
+    assert(len != 0);
+    uint64_t ntuples = tuples[0]->cval_len;
+    for (uint64_t i = 1; i < len; i++) {
+        assert(ntuples == tuples[i]->cval_len);
+    }
+    int result;
+    struct rpc_header msg;
+    msg.rpc_type = RPC_TUPLE_RESULT;
+    msg.rpc_magic = RPC_HEADER_MAGIC;
+    msg.rpc_len = len * sizeof(int);
+
+    // Write a tuple at a time
+    for (uint64_t tuple = 0; tuple < ntuples; tuple++) {
+        result = rpc_write_header(fd, &msg);
+        if (result) {
+            goto done;
+        }
+        for (unsigned i = 0; i < len; i++) {
+            uint32_t networkint = htonl(tuples[i]->cval_vals[tuple]);
+            result = io_write(fd, &networkint, sizeof(uint32_t));
+            if (result) {
+                goto done;
+            }
+        }
+    }
+    result = 0;
+    goto done;
+  done:
+    return result;
+}
+
+int
+rpc_read_tuple_result(int fd, struct rpc_header *msg,
+                      int **rettuple, unsigned *retlen)
+{
+    assert(msg != NULL);
+    assert(rettuple != NULL);
+    assert(msg->rpc_type == RPC_TUPLE_RESULT);
+
+    int result;
+    uint64_t bytes = msg->rpc_len;
+    unsigned nints = bytes / sizeof(int);
+    int *tuple = malloc(bytes);
+    if (tuple == NULL) {
+        result = -1;
+        goto done;
+    }
+    for (unsigned i = 0; i < nints; i++) {
+        int networkint;
+        result = io_read(fd, &networkint, sizeof(int));
+        if (result) {
+            goto cleanup_malloc;
+        }
+        tuple[i] = ntohl(networkint);
+    }
+    result = 0;
+    *rettuple = tuple;
+    *retlen = nints;
+    goto done;
+  cleanup_malloc:
+    free(tuple);
+  done:
+    return result;
+}
+
+int
 rpc_write_fetch_result(int fd, struct column_vals *vals)
 {
     assert(vals != NULL);

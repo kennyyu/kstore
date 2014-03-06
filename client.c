@@ -75,7 +75,7 @@ parse_stdin(int readfd, int writefd)
 
 static
 int
-client_handle_result(int readfd, int writefd, struct rpc_header *msg)
+client_handle_fetch(int readfd, int writefd, struct rpc_header *msg)
 {
     (void) writefd;
     assert(msg->rpc_type == RPC_FETCH_RESULT);
@@ -119,6 +119,32 @@ client_handle_error(int readfd, int writefd, struct rpc_header *msg)
     return result;
 }
 
+int
+client_handle_tuple(int readfd, int writefd, struct rpc_header *msg)
+{
+    (void) writefd;
+    assert(msg->rpc_type == RPC_TUPLE_RESULT);
+    int *tuple = NULL;
+    unsigned len;
+    int result = rpc_read_tuple_result(readfd, msg, &tuple, &len);
+    if (result) {
+        goto done;
+    }
+    assert(tuple != NULL);
+    printf("(");
+    for (unsigned i = 0; i < len - 1; i++) {
+        printf("%d,", tuple[i]);
+    }
+    printf("%d)\n", tuple[len - 1]);
+    free(tuple);
+
+    result = 0;
+    goto done;
+
+  done:
+    return result;
+}
+
 static
 int
 parse_sockfd(int readfd, int writefd)
@@ -135,7 +161,10 @@ parse_sockfd(int readfd, int writefd)
         result = -1;
         break;
     case RPC_FETCH_RESULT:
-        result = client_handle_result(readfd, writefd, &msg);
+        result = client_handle_fetch(readfd, writefd, &msg);
+        break;
+    case RPC_TUPLE_RESULT:
+        result = client_handle_tuple(readfd, writefd, &msg);
         break;
     case RPC_ERROR:
         result = client_handle_error(readfd, writefd, &msg);

@@ -165,6 +165,12 @@ parse_line(char *line)
         op->op_type = OP_INSERT;
         goto done;
     }
+    bzero(op, sizeof(struct op));
+    if (sscanf(line, "tuple(%[^)])",
+        (char *) &op->op_tuple.op_tuple_vars) == 1) {
+        op->op_type = OP_TUPLE;
+        goto done;
+    }
     goto cleanup_op;
 
   cleanup_op:
