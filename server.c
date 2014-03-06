@@ -302,8 +302,29 @@ static
 int
 server_eval_insert(struct server_jobctx *jobctx, struct op *op)
 {
-    // TODO
-    return 0;
+    assert(jobctx != NULL);
+    assert(op != NULL);
+    assert(op->op_type == OP_INSERT);
+
+    int result;
+    struct column *col =
+            column_open(jobctx->sj_storage, op->op_insert.op_insert_col);
+    if (col == NULL) {
+        result = -1;
+        goto done;
+    }
+    result = column_insert(col, op->op_insert.op_insert_val);
+    if (result) {
+        goto done;
+    }
+
+    // success
+    result = 0;
+    goto cleanup_col;
+  cleanup_col:
+    column_close(col);
+  done:
+    return result;
 }
 
 static

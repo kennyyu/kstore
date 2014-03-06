@@ -1376,6 +1376,181 @@ column_load_index_btree(struct column *col, int *vals, uint64_t num)
     return result;
 }
 
+// PRECONDITION: MUST BE HOLDING LOCK
+static
+int
+column_insert_btree(struct column *col, int val)
+{
+    assert(col != NULL);
+    assert(col->col_disk.cd_stype == STORAGE_BTREE);
+
+    uint64_t index = col->col_disk.cd_ntuples;
+    struct btree_entry entry;
+    bzero(&entry, sizeof(struct btree_entry));
+    entry.bte_key = val;
+    entry.bte_index = index;
+    return btree_insert(col, &entry);
+}
+
+// PRECONDITION: MUST BE HOLDING LOCK
+static
+int
+column_insert_sorted(struct column *col, int val)
+{
+    assert(col != NULL);
+    assert(col->col_disk.cd_stype == STORAGE_SORTED);
+
+    int result;
+    uint64_t index = col->col_disk.cd_ntuples;
+    struct column_entry_sorted entry;
+    bzero(&entry, sizeof(struct column_entry_sorted));
+    entry.ce_val = val;
+    entry.ce_index = index;
+
+    // Find the lower bound on where we should insert this new value
+    uint64_t position;
+    result = column_search_sorted(col, val, &position);
+    if (result) {
+        goto done;
+    }
+    page_t newpage;
+
+    // Insert the value and shift all the pages over
+    page_t page = FILE_FIRST_PAGE + (position / COLENTRY_SORTED_PER_PAGE);
+    uint64_t ix = position % COLENTRY_SORTED_PER_PAGE;
+    struct column_entry_sorted tempentry = entry;
+    struct column_entry_sorted colbuf[COLENTRY_SORTED_PER_PAGE];
+    while (1) {
+        // if the page hasn't been allocated before, then
+        // we are inserting at the end
+        if (!file_page_isalloc(col->col_index_file, page)) {
+            assert(ix == 0);
+            result = file_alloc_page(col->col_index_file, &newpage);
+            if (result) {
+                goto cleanup_page;
+            }
+            assert(page == newpage);
+        }
+        result = file_read(col->col_index_file, page, colbuf);
+        if (result) {
+            goto done;
+        }
+        uint64_t ntuples_before =
+                (page - FILE_FIRST_PAGE) * COLENTRY_SORTED_PER_PAGE;
+        unsigned ntuples_this = MIN(COLENTRY_SORTED_PER_PAGE,
+                col->col_disk.cd_ntuples - ntuples_before);
+        // if there is space in this page, shift everything over
+        // and then insert it
+        if (ntuples_this < COLENTRY_SORTED_PER_PAGE) {
+            memmove(&colbuf[ix + 1], &colbuf[ix],
+                    (ntuples_this - ix) * sizeof(struct column_entry_sorted));
+            colbuf[ix] = entry;
+            result = file_write(col->col_index_file, page, colbuf);
+            assert(result == 0);
+            break;
+        }
+
+        // otherwise we need to save the last item to insert into
+        // the next page
+        tempentry = colbuf[ntuples_this - 1]; // save the last entry
+        memmove(&colbuf[ix + 1], &colbuf[ix],
+                (ntuples_this - ix - 1) * sizeof(struct column_entry_sorted));
+        colbuf[ix] = entry;
+        result = file_write(col->col_index_file, page, colbuf);
+        assert(result == 0);
+
+        entry = tempentry;
+        ix = 0;
+        page++;
+    }
+    col->col_disk.cd_ntuples++;
+    col->col_dirty = true;
+
+    // success
+    result = 0;
+    goto done;
+  cleanup_page:
+    file_free_page(col->col_index_file, newpage);
+  done:
+    return result;
+}
+
+// PRECONDITION: MUST BE HOLDING LOCK
+static
+int
+column_insert_unsorted(struct column *col, int val)
+{
+    assert(col != NULL);
+
+    int result;
+    uint64_t index = col->col_disk.cd_ntuples;
+    page_t page = FILE_FIRST_PAGE + index / COLENTRY_UNSORTED_PER_PAGE;
+    page_t newpage;
+    if (!file_page_isalloc(col->col_base_file, page)) {
+        result = file_alloc_page(col->col_base_file, &newpage);
+        if (result) {
+            goto done;
+        }
+        assert(page == newpage);
+    }
+    struct column_entry_unsorted colbuf[COLENTRY_UNSORTED_PER_PAGE];
+    result = file_read(col->col_base_file, page, colbuf);
+    if (result) {
+        goto cleanup_page;
+    }
+    unsigned ix = index % COLENTRY_UNSORTED_PER_PAGE;
+    colbuf[ix].ce_val = val;
+    result = file_write(col->col_base_file, page, colbuf);
+    if (result) {
+        goto cleanup_page;
+    }
+
+    // success
+    result = 0;
+    goto done;
+  cleanup_page:
+    file_free_page(col->col_base_file, newpage);
+  done:
+    return result;
+}
+
+int
+column_insert(struct column *col, int val)
+{
+    assert(col != NULL);
+    int result;
+    rwlock_acquire_write(col->col_rwlock);
+
+    // we always insert into the unsorted projection as well
+    // because we use this for fetching
+    result = column_insert_unsorted(col, val);
+    if (result) {
+        goto done;
+    }
+    switch (col->col_disk.cd_stype) {
+    case STORAGE_BTREE:
+        result = column_insert_btree(col, val);
+        break;
+    case STORAGE_SORTED:
+        result = column_insert_sorted(col, val);
+        break;
+    case STORAGE_UNSORTED:
+        col->col_disk.cd_ntuples++;
+        col->col_dirty = true;
+        break;
+    default:
+        assert(0);
+        break;
+    }
+
+    // success
+    result = 0;
+    goto done;
+  done:
+    rwlock_release(col->col_rwlock);
+    return result;
+}
+
 int
 column_load(struct column *col, int *vals, uint64_t num)
 {
