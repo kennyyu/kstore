@@ -20,6 +20,7 @@
 
 #define PORT "5000"
 #define HOST "localhost"
+#define LOADDIR "p2tests"
 
 #define BUFSIZE 4096
 
@@ -47,6 +48,9 @@ parse_stdin(int readfd, int writefd)
             goto cleanup_ops;
         }
         if (op->op_type == OP_LOAD) {
+            char loadfilebuf[128];
+            sprintf(loadfilebuf, "%s/%s", LOADDIR, op->op_load.op_load_file);
+            strcpy(op->op_load.op_load_file, loadfilebuf);
             result = rpc_write_file(writefd, op);
             if (result) {
                 goto cleanup_ops;
