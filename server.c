@@ -18,6 +18,7 @@
 #include "src/common/include/rpc.h"
 #include "src/common/include/array.h"
 #include "src/common/include/csv.h"
+#include "src/common/include/search.h"
 #include "src/server/include/storage.h"
 
 #define PORT 5000
@@ -366,6 +367,8 @@ server_eval_fetch(struct server_jobctx *jobctx, struct op *op)
     switch (op->op_type) {
     case OP_FETCH:
         // now write the results back to the client
+        // sort the values before returning
+        qsort(vals->cval_vals, vals->cval_len, sizeof(int), int_compare);
         result = rpc_write_fetch_result(jobctx->sj_fd, vals);
         if (result) {
             goto cleanup_vals;

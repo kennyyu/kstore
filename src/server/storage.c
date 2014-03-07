@@ -1269,8 +1269,6 @@ column_fetch(struct column *col, struct column_ids *ids)
         goto cleanup_malloc;
     }
     memcpy(cvals->cval_vals, vals->arr.v, sizeof(int) * cvals->cval_len);
-    // sort the values before returning
-    qsort(cvals->cval_vals, cvals->cval_len, sizeof(int), int_compare);
     result = 0;
     goto cleanup_vals;
 
