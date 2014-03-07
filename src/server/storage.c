@@ -657,6 +657,7 @@ btree_insert_helper(struct file *f,
     if (nentries < BTENTRY_PER_PAGE) {
         result = btree_insert_entry(f, current, entry);
         assert(result == 0);
+        bzero(&entrybuf, sizeof(struct btree_entry));
         goto success;
     }
 

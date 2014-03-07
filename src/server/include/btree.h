@@ -14,8 +14,8 @@
 #define BTREE_PAGE_NULL 0
 
 enum btree_node_type {
-    BTREE_NODE_INTERNAL,
-    BTREE_NODE_LEAF,
+    BTREE_NODE_INTERNAL = 1,
+    BTREE_NODE_LEAF = 2,
 };
 
 struct btree_entry {
