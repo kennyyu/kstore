@@ -681,6 +681,8 @@ btree_insert_helper(struct file *f,
     case BTREE_NODE_INTERNAL:
         // one of the entries from current becomes the left pointer
         // in the new node
+        // we also propagate one of the entries up, no need to maintain
+        // another copy at this level
         nodebuf.bt_header.bth_nentries = (nentries - halfix) - 1;
         nodebuf.bt_header.bth_left = current->bt_entries[halfix].bte_page;
         base = &current->bt_entries[halfix + 1];
@@ -704,17 +706,36 @@ btree_insert_helper(struct file *f,
         assert(result == 0);
     }
 
+    // Propagate the new entry back to the caller to be inserted into the
+    // parent node.
+    bzero(&entrybuf, sizeof(struct btree_entry));
+    switch (current->bt_header.bth_type) {
+    case BTREE_NODE_LEAF:
+        // if we are a leaf node, we must propagate a copy of the
+        // key up and maintain another copy at this level
+        entrybuf.bte_key = nodebuf.bt_entries[0].bte_key;
+        entrybuf.bte_page = newpage;
+        break;
+    case BTREE_NODE_INTERNAL:
+        // if we are an internal node, we don't need to maintain another
+        // copy of the key at this level
+        entrybuf.bte_key =
+            current->bt_entries[current->bt_header.bth_nentries - 1].bte_key;
+        entrybuf.bte_page = newpage;
+        bzero(&current->bt_entries[current->bt_header.bth_nentries - 1],
+              sizeof(struct btree_entry));
+        current->bt_header.bth_nentries--;
+        break;
+    default:
+        assert(0);
+        break;
+    }
     // Now we need to synch all the changes in the current and new nodes
     result = btree_node_synch(f, &nodebuf);
     assert(result == 0);
     result = btree_node_synch(f, current);
     assert(result == 0);
 
-    // Propagate the new entry back to the caller to be inserted into the
-    // parent node.
-    bzero(&entrybuf, sizeof(struct btree_entry));
-    entrybuf.bte_key = nodebuf.bt_entries[0].bte_key;
-    entrybuf.bte_page = newpage;
     goto success;
 
   success:

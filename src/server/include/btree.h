@@ -11,8 +11,6 @@
 // * pointer in an entrie allows for values x such that val <= x
 // * Allow duplicates in internal nodes
 
-// location of the root page
-#define BTREE_ROOT_PAGE FILE_FIRST_PAGE
 #define BTREE_PAGE_NULL 0
 
 enum btree_node_type {
