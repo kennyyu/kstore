@@ -188,6 +188,16 @@ storage_synch_column(struct storage *storage,
     return result;
 }
 
+static
+int
+btree_node_synch(struct file *f, struct btree_node *node)
+{
+    assert(f != NULL);
+    assert(node != NULL);
+    assert(node->bt_header.bth_page != BTREE_PAGE_NULL);
+    return file_write(f, node->bt_header.bth_page, node);
+}
+
 int
 storage_add_column(struct storage *storage, char *colname,
                    enum storage_type stype)
@@ -263,6 +273,17 @@ storage_add_column(struct storage *storage, char *colname,
                 goto cleanup_file;
             }
             assert(rootpage != BTREE_PAGE_NULL);
+            struct btree_node root;
+            bzero(&root, sizeof(struct btree_node));
+            root.bt_header.bth_type = BTREE_NODE_LEAF;
+            root.bt_header.bth_next = BTREE_PAGE_NULL;
+            root.bt_header.bth_page = rootpage;
+            root.bt_header.bth_nentries = 0;
+            result = btree_node_synch(colindexfile, &root);
+            if (result) {
+                file_close(colindexfile);
+                goto cleanup_file;
+            }
             newcol.cd_btree_root = rootpage;
         }
         file_close(colindexfile);
@@ -562,16 +583,6 @@ btree_search(struct column *col, int val,
     goto done;
   done:
     return result;
-}
-
-static
-int
-btree_node_synch(struct file *f, struct btree_node *node)
-{
-    assert(f != NULL);
-    assert(node != NULL);
-    assert(node->bt_header.bth_page != BTREE_PAGE_NULL);
-    return file_write(f, node->bt_header.bth_page, node);
 }
 
 static
@@ -1377,17 +1388,6 @@ column_load_index_btree(struct column *col, int *vals, uint64_t num)
 
     // the root page should have been created in storage_add_column
     assert(col->col_disk.cd_btree_root != BTREE_PAGE_NULL);
-
-    struct btree_node root;
-    bzero(&root, sizeof(struct btree_node));
-    root.bt_header.bth_type = BTREE_NODE_LEAF;
-    root.bt_header.bth_next = BTREE_PAGE_NULL;
-    root.bt_header.bth_page = col->col_disk.cd_btree_root;
-    root.bt_header.bth_nentries = 0;
-    result = btree_node_synch(col->col_index_file, &root);
-    if (result) {
-        goto done;
-    }
 
     // Now insert all the tuples one by one
     for (uint64_t i = 0; i < num; i++) {
