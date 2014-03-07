@@ -2,6 +2,7 @@
 #include <assert.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <getopt.h>
 #include <netdb.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -19,7 +20,7 @@
 #include "src/common/include/csv.h"
 #include "src/server/include/storage.h"
 
-#define PORT "5000"
+#define PORT 5000
 #define BACKLOG 16
 #define NTHREADS 16
 #define DBDIR "db"
@@ -604,9 +605,63 @@ server_routine(void *arg, unsigned threadnum)
     server_jobctx_destroy(sarg);
 }
 
+static struct {
+    int sopt_port;
+    int sopt_backlog;
+    int sopt_nthreads;
+    char sopt_dbdir[128];
+} server_options = {
+    .sopt_port = PORT,
+    .sopt_backlog = BACKLOG,
+    .sopt_nthreads = NTHREADS,
+    .sopt_dbdir = DBDIR,
+};
+
+const char *short_options = "h";
+
+const struct option long_options[] = {
+    {"help", no_argument, NULL, 'h'},
+    {"port", required_argument, &server_options.sopt_port, 0},
+    {"backlog", required_argument, &server_options.sopt_backlog, 0},
+    {"nthreads", required_argument,  &server_options.sopt_nthreads, 0},
+    {"dbdir", required_argument, NULL, 0},
+    {NULL, 0, NULL, 0}
+};
+
 int
-main(void)
+main(int argc, char **argv)
 {
+    while (1) {
+        int option_index;
+        int c = getopt_long(argc, argv, short_options,
+                           long_options, &option_index);
+        if (c == -1) {
+            break;
+        }
+        switch (c) {
+        case 0:
+            if (optarg) {
+                if (strcmp(long_options[option_index].name, "dbdir") == 0) {
+                    strcpy(server_options.sopt_dbdir, optarg);
+                } else {
+                    *(long_options[option_index].flag) = atoi(optarg);
+                }
+            }
+            break;
+        case 'h':
+            printf("Usage: %s\n", argv[0]);
+            printf("--help\n");
+            printf("--port P        [default=5000]\n");
+            printf("--backlog B     [default=16]\n");
+            printf("--nthreads T    [default=16]\n");
+            printf("--dbdir dir     [default=db]\n");
+            return 0;
+        }
+    }
+    printf("port: %u, backlog: %u, nthread: %u, dbdir: %s\n",
+            server_options.sopt_port, server_options.sopt_backlog,
+            server_options.sopt_nthreads, server_options.sopt_dbdir);
+
     int result;
     int listenfd, acceptfd;
     struct addrinfo hints, *servinfo;
@@ -616,7 +671,9 @@ main(void)
     hints.ai_family = AF_UNSPEC;
     hints.ai_socktype = SOCK_STREAM;
     hints.ai_flags = AI_PASSIVE;
-    result = getaddrinfo(NULL, PORT, &hints, &servinfo);
+    char portbuf[16];
+    sprintf(portbuf, "%d", server_options.sopt_port);
+    result = getaddrinfo(NULL, portbuf, &hints, &servinfo);
     if (result != 0) {
         perror("getaddrinfo");
         result = -1;
@@ -648,7 +705,7 @@ main(void)
     freeaddrinfo(servinfo);
 
     // put the socket in listening mode
-    result = listen(listenfd, BACKLOG);
+    result = listen(listenfd, server_options.sopt_backlog);
     if (result == -1) {
         perror("listen");
         goto cleanup_listenfd;
@@ -666,14 +723,14 @@ main(void)
     }
 
     // init the storage directory
-    struct storage *storage = storage_init(DBDIR);
+    struct storage *storage = storage_init(server_options.sopt_dbdir);
     if (storage == NULL) {
         fprintf(stderr, "storage failed\n");
         goto cleanup_listenfd;
     }
 
     // create a threadpool to handle the connections
-    struct threadpool *tpool = threadpool_create(NTHREADS);
+    struct threadpool *tpool = threadpool_create(server_options.sopt_nthreads);
     if (tpool == NULL) {
         perror("threadpool");
         goto cleanup_storage;

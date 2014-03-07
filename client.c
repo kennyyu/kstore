@@ -158,7 +158,7 @@ parse_sockfd(int readfd, int writefd)
     }
     switch (msg.rpc_type) {
     case RPC_TERMINATE:
-        printf("Received TERMINATE from server\n");
+        //fprintf(stderr, "Received TERMINATE from server\n");
         result = -1;
         break;
     case RPC_FETCH_RESULT:
