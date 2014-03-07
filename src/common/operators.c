@@ -67,6 +67,12 @@ char *op_string(struct op *op) {
                 op->op_fetch.op_fetch_col,
                 op->op_fetch.op_fetch_pos);
         break;
+    case OP_FETCH_ASSIGN:
+        sprintf(buf, "%s=fetch(%s,%s)",
+                op->op_fetch.op_fetch_var,
+                op->op_fetch.op_fetch_col,
+                op->op_fetch.op_fetch_pos);
+        break;
     case OP_CREATE:
         stype = storage_type_string(op->op_create.op_create_stype);
         sprintf(buf, "create(%s,\"%s\")",

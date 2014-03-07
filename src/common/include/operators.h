@@ -11,6 +11,7 @@ enum op_type {
     OP_SELECT_RANGE,
     OP_SELECT_VALUE,
     OP_FETCH,
+    OP_FETCH_ASSIGN,
     OP_CREATE,
     OP_LOAD,
     OP_INSERT,
@@ -43,7 +44,8 @@ struct op_select {
 
 struct op_fetch {
     char op_fetch_col[COLUMNLEN];
-    char op_fetch_pos[COLUMNLEN];
+    char op_fetch_pos[COLUMNLEN / 2];
+    char op_fetch_var[COLUMNLEN / 2];
 };
 
 struct op_create {

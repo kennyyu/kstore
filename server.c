@@ -36,12 +36,20 @@ sigint_handler(int sig)
     printf("Caught shutdown signal, shutting down...\n");
 }
 
+enum vartuple_type {
+    VAR_IDS,
+    VAR_VALS,
+};
+
 // tuple of (variable, column_id) to store the
-// result of selects
+// result of selects and fetches
 struct vartuple {
     char vt_var[128];
-    char vt_col[64];
-    struct column_ids *vt_column_ids;
+    enum vartuple_type vt_type;
+    union {
+        struct column_ids *vt_column_ids;
+        struct column_vals *vt_column_vals;
+    };
 };
 
 // (file name) -> file descriptor to CSV file
@@ -99,7 +107,17 @@ server_jobctx_destroy(struct server_jobctx *jobctx)
     assert(jobctx != NULL);
     while (vartuplearray_num(jobctx->sj_env) > 0) {
         struct vartuple *v = vartuplearray_get(jobctx->sj_env, 0);
-        column_ids_destroy(v->vt_column_ids);
+        switch (v->vt_type) {
+        case VAR_IDS:
+            column_ids_destroy(v->vt_column_ids);
+            break;
+        case VAR_VALS:
+            column_vals_destroy(v->vt_column_vals);
+            break;
+        default:
+            assert(0);
+            break;
+        }
         free(v);
         vartuplearray_remove(jobctx->sj_env, 0);
     }
@@ -184,6 +202,86 @@ server_eval_get_var(struct vartuplearray *env, char *varname)
 
 static
 int
+server_add_var(struct vartuplearray *env, char *varname,
+               enum vartuple_type type,
+               struct column_ids *ids,
+               struct column_vals *vals)
+{
+    assert(env != NULL);
+    assert(varname != NULL);
+    switch (type) {
+    case VAR_IDS:
+        assert(ids != NULL);
+        assert(vals == NULL);
+        break;
+    case VAR_VALS:
+        assert(vals != NULL);
+        assert(ids == NULL);
+        break;
+    default:
+        assert(0);
+        break;
+    }
+
+    int result;
+    bool should_cleanup_vtuple_on_err = false;
+    struct vartuple *vtuple = server_eval_get_var(env, varname);
+    if (vtuple == NULL) {
+        // we couldn't find the variable in the environment, so we
+        // need to create it
+        vtuple = malloc(sizeof(struct vartuple));
+        if (vtuple == NULL) {
+            result = -1;
+            goto done;
+        }
+        should_cleanup_vtuple_on_err = true;
+        strcpy(vtuple->vt_var, varname);
+        result = vartuplearray_add(env, vtuple, NULL);
+        if (result) {
+            goto cleanup_vartuple;
+        }
+    } else {
+        // need to destroy the old assignment before reusing
+        switch (vtuple->vt_type) {
+        case VAR_IDS:
+            column_ids_destroy(vtuple->vt_column_ids);
+            vtuple->vt_column_ids = NULL;
+            break;
+        case VAR_VALS:
+            column_vals_destroy(vtuple->vt_column_vals);
+            vtuple->vt_column_vals = NULL;
+            break;
+        default:
+            assert(0);
+            break;
+        }
+    }
+    vtuple->vt_type = type;
+    switch (type) {
+    case VAR_IDS:
+        vtuple->vt_column_ids = ids;
+        break;
+    case VAR_VALS:
+        vtuple->vt_column_vals = vals;
+        break;
+    default:
+        assert(0);
+        break;
+    }
+
+    // success
+    result = 0;
+    goto done;
+  cleanup_vartuple:
+    if (should_cleanup_vtuple_on_err) {
+        free(vtuple);
+    }
+  done:
+    return result;
+}
+
+static
+int
 server_eval_select(struct server_jobctx *jobctx, struct op *op)
 {
     assert(jobctx != NULL);
@@ -219,37 +317,16 @@ server_eval_select(struct server_jobctx *jobctx, struct op *op)
         assert(0);
         break;
     }
-    bool should_cleanup_vtuple_on_err = false;
-    struct vartuple *vtuple =
-            server_eval_get_var(jobctx->sj_env, op->op_select.op_sel_var);
-    if (vtuple == NULL) {
-        // we couldn't find the variable: we need to make a new vartuple
-        vtuple = malloc(sizeof(struct vartuple));
-        if (vtuple == NULL) {
-            result = -1;
-            goto cleanup_col;
-        }
-        should_cleanup_vtuple_on_err = true;
-        strcpy(vtuple->vt_var, op->op_select.op_sel_var);
-        result = vartuplearray_add(jobctx->sj_env, vtuple, NULL);
-        if (result) {
-            goto cleanup_vartuple;
-        }
-    } else {
-        // need to destroy the old column ids before reassigning
-        column_ids_destroy(vtuple->vt_column_ids);
+    result = server_add_var(jobctx->sj_env, op->op_select.op_sel_var,
+                            VAR_IDS, ids, NULL);
+    if (result) {
+        goto cleanup_col;
     }
-    strcpy(vtuple->vt_col, col->col_disk.cd_col_name);
-    vtuple->vt_column_ids = ids;
 
     // success
     result = 0;
     goto cleanup_col;
 
-  cleanup_vartuple:
-    if (should_cleanup_vtuple_on_err) {
-        free(vtuple);
-    }
   cleanup_col:
     column_close(col);
   done:
@@ -262,7 +339,7 @@ server_eval_fetch(struct server_jobctx *jobctx, struct op *op)
 {
     assert(jobctx != NULL);
     assert(op != NULL);
-    assert(op->op_type == OP_FETCH);
+    assert(op->op_type == OP_FETCH || op->op_type == OP_FETCH_ASSIGN);
     int result;
     struct column *col =
             column_open(jobctx->sj_storage, op->op_fetch.op_fetch_col);
@@ -277,16 +354,32 @@ server_eval_fetch(struct server_jobctx *jobctx, struct op *op)
         result = -1; // couldn't find var
         goto cleanup_col;
     }
+    assert(v->vt_type == VAR_IDS);
     // now that we have the ids, let's fetch the values for those ids
     struct column_vals *vals = column_fetch(col, v->vt_column_ids);
     if (vals == NULL) {
         result = -1;
         goto cleanup_col;
     }
-    // now write the results back to the client
-    result = rpc_write_fetch_result(jobctx->sj_fd, vals);
-    if (result) {
-        goto cleanup_vals;
+
+    switch (op->op_type) {
+    case OP_FETCH:
+        // now write the results back to the client
+        result = rpc_write_fetch_result(jobctx->sj_fd, vals);
+        if (result) {
+            goto cleanup_vals;
+        }
+        break;
+    case OP_FETCH_ASSIGN:
+        result = server_add_var(jobctx->sj_env, op->op_fetch.op_fetch_var,
+                                VAR_VALS, NULL, vals);
+        if (result) {
+            goto cleanup_vals;
+        }
+        result = 0;
+        goto cleanup_col;  // don't destroy results
+    default:
+        break;
     }
 
     // success
@@ -364,32 +457,20 @@ server_eval_tuple(struct server_jobctx *jobctx, struct op *op)
     const char *delimiters = ",";
     char *pch;
     char *saveptr;
+
+    // Find the variable in the environment
     pch = strtok_r((char *) op->op_tuple.op_tuple_vars, delimiters, &saveptr);
     while (pch != NULL) {
-        // Get the variable result
         struct vartuple *v = server_eval_get_var(jobctx->sj_env, pch);
         if (v == NULL) {
             result = -1;
             goto cleanup_valsarray;
         }
-        // Fetch the values for this column
-        struct column *col = column_open(jobctx->sj_storage, v->vt_col);
-        if (col == NULL) {
-            result = -1;
-            goto cleanup_valsarray;
-        }
-        struct column_vals *cvals = column_fetch(col, v->vt_column_ids);
-        if (cvals == NULL) {
-            column_close(col);
-            goto cleanup_valsarray;
-        }
-        result = column_valsarray_add(tuples, cvals, NULL);
+        assert(v->vt_type == VAR_VALS);
+        result = column_valsarray_add(tuples, v->vt_column_vals, NULL);
         if (result) {
-            column_vals_destroy(cvals);
-            column_close(col);
             goto cleanup_valsarray;
         }
-        column_close(col);
         pch = strtok_r(NULL, delimiters, &saveptr);
     }
     result = rpc_write_tuple_result(jobctx->sj_fd,
@@ -403,7 +484,6 @@ server_eval_tuple(struct server_jobctx *jobctx, struct op *op)
     goto cleanup_valsarray;
   cleanup_valsarray:
     while (column_valsarray_num(tuples) > 0) {
-        column_vals_destroy(column_valsarray_get(tuples, 0));
         column_valsarray_remove(tuples, 0);
     }
     column_valsarray_destroy(tuples);
@@ -426,6 +506,7 @@ server_eval(struct server_jobctx *jobctx, struct op *op)
     case OP_SELECT_VALUE:
         return server_eval_select(jobctx, op);
     case OP_FETCH:
+    case OP_FETCH_ASSIGN:
         return server_eval_fetch(jobctx, op);
     case OP_CREATE:
         return server_eval_create(jobctx, op);
@@ -516,6 +597,10 @@ server_routine(void *arg, unsigned threadnum)
     }
     // TODO send result/error
   done:
+    if (result) {
+        (void) rpc_write_error(sarg->sj_fd, "server error");
+        (void) rpc_write_terminate(sarg->sj_fd);
+    }
     server_jobctx_destroy(sarg);
 }
 

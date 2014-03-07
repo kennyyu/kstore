@@ -132,9 +132,18 @@ parse_line(char *line)
         op->op_type = OP_SELECT_VALUE;
         goto done;
     }
+    bzero(op, sizeof(struct op));
     if (sscanf(line, "select(%[^,)])",
         (char *) &op->op_select.op_sel_col) == 1) {
         op->op_type = OP_SELECT_ALL;
+        goto done;
+    }
+    bzero(op, sizeof(struct op));
+    if (sscanf(line, "%[^=]=fetch(%[^,],%[^)])",
+        (char *) &op->op_fetch.op_fetch_var,
+        (char *) &op->op_fetch.op_fetch_col,
+        (char *) &op->op_fetch.op_fetch_pos) == 3) {
+        op->op_type = OP_FETCH_ASSIGN;
         goto done;
     }
     bzero(op, sizeof(struct op));
