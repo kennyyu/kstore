@@ -9,3 +9,4 @@ testbin
 /db
 core
 /tmp
+/tmp.*

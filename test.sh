@@ -7,7 +7,7 @@ then
 fi
 
 make
-TMP=tmp
+TMP="tmp.$RANDOM"
 mkdir -p $TMP
 echo "storing output in $TMP/"
 
@@ -20,11 +20,11 @@ do
     mine="$TMP/$base.me"
     ./client < $t > $mine
     results=`diff $expected $mine`
-    if [ $results ]
+    if [ -z "$results" ]
     then
+        echo "[PASS] $t"
+    else
         echo "[FAIL] $t"
         echo "       $results"
-    else
-        echo "[PASS] $t"
     fi
 done
