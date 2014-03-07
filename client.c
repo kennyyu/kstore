@@ -1,12 +1,14 @@
 #include <arpa/inet.h>
 #include <assert.h>
 #include <errno.h>
+#include <getopt.h>
 #include <fcntl.h>
 #include <netdb.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
+#include <signal.h>
 #include <sys/time.h>
 #include <sys/socket.h>
 #include <sys/types.h>
@@ -18,9 +20,44 @@
 #include "src/common/include/parser.h"
 #include "src/common/include/io.h"
 
-#define PORT "5000"
+// boolean to tell the client to keep looping
+static bool volatile keep_running = true;
+
+static
+void
+sigint_handler(int sig)
+{
+    (void) sig;
+    keep_running = false;
+    fprintf(stderr, "Caught shutdown signal, shutting down client...\n");
+}
+
+#define PORT 5000
 #define HOST "localhost"
 #define LOADDIR "p2tests"
+
+static struct {
+    int copt_port;
+    char copt_host[128];
+    char copt_loaddir[128];
+    int copt_interactive;
+} client_options = {
+    .copt_port = PORT,
+    .copt_interactive = 0,
+    .copt_host = HOST,
+    .copt_loaddir = LOADDIR,
+};
+
+const char *short_options = "h";
+
+const struct option long_options[] = {
+    {"help", no_argument, NULL, 'h'},
+    {"port", required_argument, &client_options.copt_port, 0},
+    {"host", required_argument, NULL, 0},
+    {"loaddir", required_argument,  NULL, 0},
+    {"interactive", no_argument, &client_options.copt_interactive, 1},
+    {NULL, 0, NULL, 0}
+};
 
 #define BUFSIZE 4096
 
@@ -57,7 +94,8 @@ parse_stdin(int readfd, int writefd)
         }
         if (op->op_type == OP_LOAD) {
             char loadfilebuf[128];
-            sprintf(loadfilebuf, "%s/%s", LOADDIR, op->op_load.op_load_file);
+            sprintf(loadfilebuf, "%s/%s", client_options.copt_loaddir,
+                    op->op_load.op_load_file);
             strcpy(op->op_load.op_load_file, loadfilebuf);
             result = rpc_write_file(writefd, op);
             if (result) {
@@ -158,7 +196,9 @@ parse_sockfd(int readfd, int writefd)
     }
     switch (msg.rpc_type) {
     case RPC_TERMINATE:
-        //fprintf(stderr, "Received TERMINATE from server\n");
+        if (client_options.copt_interactive) {
+            fprintf(stderr, "Received TERMINATE from server\n");
+        }
         result = -1;
         break;
     case RPC_FETCH_RESULT:
@@ -186,8 +226,43 @@ parse_sockfd(int readfd, int writefd)
 }
 
 int
-main(void)
+main(int argc, char **argv)
 {
+    while (1) {
+        int option_index;
+        int c = getopt_long(argc, argv, short_options,
+                           long_options, &option_index);
+        if (c == -1) {
+            break;
+        }
+        switch (c) {
+        case 0:
+            if (optarg) {
+                if (strcmp(long_options[option_index].name, "host") == 0) {
+                    strcpy(client_options.copt_host, optarg);
+                } else if (strcmp(long_options[option_index].name, "loaddir") == 0) {
+                    strcpy(client_options.copt_loaddir, optarg);
+                } else {
+                    *(long_options[option_index].flag) = atoi(optarg);
+                }
+            }
+            break;
+        case 'h':
+            printf("Usage: %s\n", argv[0]);
+            printf("--help\n");
+            printf("--port P        [default=5000]\n");
+            printf("--host H        [default=localhost]\n");
+            printf("--loaddir dir    [default=p2tests]\n");
+            printf("--interactive\n");
+            return 0;
+        }
+    }
+    if (client_options.copt_interactive) {
+        printf("port: %d, host: %s, loaddir: %s, interactive: %d\n",
+               client_options.copt_port, client_options.copt_host,
+               client_options.copt_loaddir, client_options.copt_interactive);
+    }
+
     int result;
     int sockfd;
     struct addrinfo hints, *servinfo;
@@ -195,7 +270,9 @@ main(void)
     memset(&hints, 0, sizeof(hints));
     hints.ai_family = AF_UNSPEC;
     hints.ai_socktype = SOCK_STREAM;
-    result = getaddrinfo(HOST, PORT, &hints, &servinfo);
+    char portbuf[16];
+    sprintf(portbuf, "%d", client_options.copt_port);
+    result = getaddrinfo(client_options.copt_host, portbuf, &hints, &servinfo);
     if (result != 0) {
         perror("getaddrinfo");
         result = -1;
@@ -219,13 +296,28 @@ main(void)
         goto cleanup_sockfd;
     }
 
+    // install a SIGINT handler for graceful shutdown
+    struct sigaction sig;
+    sig.sa_handler = sigint_handler;
+    sig.sa_flags = 0;
+    sigemptyset( &sig.sa_mask );
+    result = sigaction( SIGINT, &sig, NULL );
+    if (result == -1) {
+        perror("sigaction");
+        goto done;
+    }
+
     bool read_stdin = true;
     bool read_socket = true;
-    while (read_stdin || read_socket) {
+    while (keep_running && (read_stdin || read_socket)) {
         fd_set readfds;
         FD_ZERO(&readfds);
         if (read_stdin) {
             FD_SET(STDIN_FILENO, &readfds);
+            if (client_options.copt_interactive) {
+                printf(">>> ");
+                fflush(stdout);
+            }
         }
         if (read_socket) {
             FD_SET(sockfd, &readfds);
@@ -240,18 +332,22 @@ main(void)
         if (read_stdin && FD_ISSET(STDIN_FILENO, &readfds)) {
             result = parse_stdin(STDIN_FILENO, sockfd);
             if (result) {
+                if (client_options.copt_interactive) {
+                    fprintf(stderr, "ERROR: client error\n");
+                }
                 // if stdin is done, send a connection termination message
                 // to the server
                 read_stdin = false;
-                result = rpc_write_terminate(sockfd);
-                if (result) {
-                    goto cleanup_sockfd;
-                }
+                (void) rpc_write_terminate(sockfd);
             }
         }
 
         // if we get something from the socket, parse it and write it to stdout
         if (read_socket && FD_ISSET(sockfd, &readfds)) {
+            if (client_options.copt_interactive) {
+                printf("\r     \r");
+                fflush(stdout);
+            }
             result = parse_sockfd(sockfd, STDOUT_FILENO);
             if (result) {
                 read_socket = false;
@@ -260,6 +356,7 @@ main(void)
     }
 
   cleanup_sockfd:
+    (void) rpc_write_terminate(sockfd);
     assert(close(sockfd) == 0);
   done:
     return result;

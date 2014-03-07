@@ -658,7 +658,7 @@ main(int argc, char **argv)
             return 0;
         }
     }
-    printf("port: %u, backlog: %u, nthread: %u, dbdir: %s\n",
+    printf("port: %d, backlog: %d, nthreads: %d, dbdir: %s\n",
             server_options.sopt_port, server_options.sopt_backlog,
             server_options.sopt_nthreads, server_options.sopt_dbdir);
 
