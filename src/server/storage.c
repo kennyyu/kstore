@@ -250,6 +250,21 @@ storage_add_column(struct storage *storage, char *colname,
             result = -1;
             goto cleanup_file;
         }
+        if (stype == STORAGE_BTREE) {
+            // Create a page for the root node.
+            // The first time we load, it's going to be a
+            // leaf node with 0 entries
+            // No need to declare a cleanup for rootpage
+            // because the colindexfile will be destroyed
+            page_t rootpage;
+            result = file_alloc_page(colindexfile, &rootpage);
+            if (result) {
+                file_close(colindexfile);
+                goto cleanup_file;
+            }
+            assert(rootpage != BTREE_PAGE_NULL);
+            newcol.cd_btree_root = rootpage;
+        }
         file_close(colindexfile);
     }
 
@@ -1333,28 +1348,20 @@ column_load_index_btree(struct column *col, int *vals, uint64_t num)
     assert(col->col_index_file != NULL);
     assert(vals != NULL);
     assert(col->col_disk.cd_ntuples == 0);
-    assert(col->col_disk.cd_btree_root == BTREE_PAGE_NULL);
     int result;
 
-    // Create a page for the root node.
-    // The first time we load, it's going to be a leaf node with 0 entries
-    page_t rootpage;
-    result = file_alloc_page(col->col_index_file, &rootpage);
-    if (result) {
-        goto done;
-    }
-    assert(rootpage != BTREE_PAGE_NULL);
-    col->col_disk.cd_btree_root = rootpage;
+    // the root page should have been created in storage_add_column
+    assert(col->col_disk.cd_btree_root != BTREE_PAGE_NULL);
 
     struct btree_node root;
     bzero(&root, sizeof(struct btree_node));
     root.bt_header.bth_type = BTREE_NODE_LEAF;
     root.bt_header.bth_next = BTREE_PAGE_NULL;
-    root.bt_header.bth_page = rootpage;
+    root.bt_header.bth_page = col->col_disk.cd_btree_root;
     root.bt_header.bth_nentries = 0;
     result = btree_node_synch(col->col_index_file, &root);
     if (result) {
-        goto cleanup_page;
+        goto done;
     }
 
     // Now insert all the tuples one by one
@@ -1370,8 +1377,6 @@ column_load_index_btree(struct column *col, int *vals, uint64_t num)
     // success
     result = 0;
     goto done;
-  cleanup_page:
-    file_free_page(col->col_index_file, rootpage);
   done:
     return result;
 }
