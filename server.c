@@ -598,8 +598,8 @@ server_routine(void *arg, unsigned threadnum)
     // TODO send result/error
   done:
     if (result) {
-        (void) rpc_write_error(sarg->sj_fd, "server error");
-        (void) rpc_write_terminate(sarg->sj_fd);
+        (void) rpc_write_error(clientfd, "server error");
+        (void) rpc_write_terminate(clientfd);
     }
     server_jobctx_destroy(sarg);
 }

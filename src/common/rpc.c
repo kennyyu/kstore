@@ -382,7 +382,7 @@ rpc_read_error(int fd, struct rpc_header *msg, char **retmsg)
     uint32_t len = msg->rpc_len;
     int result;
     char *error = malloc(len); // includes space for '\0'
-    if (error) {
+    if (error == NULL) {
         result = -1;
         goto done;
     }
