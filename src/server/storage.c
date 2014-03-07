@@ -481,7 +481,7 @@ btree_select_range(struct column *col,
 
     page_t curpage = pleft;
     unsigned curix = ixleft;
-    while (!((curpage != pright) && (curix != ixright))) {
+    while (1) {
         assert(curpage != BTREE_PAGE_NULL);
         result = file_read(col->col_index_file, curpage, &nodebuf);
         if (result) {
@@ -495,6 +495,9 @@ btree_select_range(struct column *col,
         for (/* none */; curix < rightbound; curix++) {
             struct btree_entry *entry = &nodebuf.bt_entries[curix];
             bitmap_mark(cids->cid_bitmap, entry->bte_index);
+        }
+        if ((curpage == pright) && (curix == ixright)) {
+            break;
         }
         curpage = nodebuf.bt_header.bth_next;
         curix = 0;
@@ -672,14 +675,14 @@ btree_insert_helper(struct file *f,
         nodebuf.bt_header.bth_nentries = nentries - halfix;
         nodebuf.bt_header.bth_next = current->bt_header.bth_next;
         current->bt_header.bth_next = newpage;
-        base = &nodebuf.bt_entries[halfix];
+        base = &current->bt_entries[halfix];
         break;
     case BTREE_NODE_INTERNAL:
         // one of the entries from current becomes the left pointer
         // in the new node
         nodebuf.bt_header.bth_nentries = (nentries - halfix) - 1;
         nodebuf.bt_header.bth_left = current->bt_entries[halfix].bte_page;
-        base = &nodebuf.bt_entries[halfix + 1];
+        base = &current->bt_entries[halfix + 1];
         break;
     default:
         assert(0);
