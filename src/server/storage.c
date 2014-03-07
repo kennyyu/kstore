@@ -578,23 +578,43 @@ static
 int
 btree_insert_entry(struct file *f,
                    struct btree_node *current,
-                   struct btree_entry *entry)
+                   struct btree_entry *entry,
+                   struct btree_entry *retentry)
 {
     assert(current != NULL);
+    int result;
+    struct btree_entry todoentry;
+    bzero(&todoentry, sizeof(struct btree_entry));
+
     unsigned nentries = current->bt_header.bth_nentries;
-    assert(nentries < BTENTRY_PER_PAGE);
 
     unsigned ix = binary_search(entry, current->bt_entries, nentries,
                                 sizeof(struct btree_entry),
                                 btree_entry_compare);
+    // since we are inserting into this node, then we must have a lower
+    // bound within this page
+    assert(ix < BTENTRY_PER_PAGE);
+
+    // if this node is already full, then we need to make a copy
+    // of the last entry and return it
+    if (nentries == BTENTRY_PER_PAGE) {
+        todoentry = current->bt_entries[BTENTRY_PER_PAGE - 1];
+    } else {
+        current->bt_header.bth_nentries++;
+        bzero(&todoentry, sizeof(struct btree_entry));
+    }
     if (ix < nentries) {
         // memmove allows overlapping regions
         memmove(&current->bt_entries[ix + 1], &current->bt_entries[ix],
                 sizeof(struct btree_entry) * (nentries - ix));
     }
     current->bt_entries[ix] = *entry;
-    current->bt_header.bth_nentries++;
-    return btree_node_synch(f, current);
+    result = btree_node_synch(f, current);
+    assert(result == 0);
+    result = 0;
+  done:
+    *retentry = todoentry;
+    return result;
 }
 
 // Inserts the entry into current
@@ -652,12 +672,27 @@ btree_insert_helper(struct file *f,
         entry = &entrybuf;
     }
 
+    // TODO redistribute keys
     // If we have space in this node, insert it.
+    // Otherwise, grab the largest key in this node and attempt to insert
+    // it into the next node.
+    /*
     unsigned nentries = current->bt_header.bth_nentries;
     if (nentries < BTENTRY_PER_PAGE) {
         result = btree_insert_entry(f, current, entry);
         assert(result == 0);
         goto success;
+    }
+    */
+    struct btree_entry entrytemp;
+    struct btree_entry entryredis = *entry;
+    bzero(&entrytemp, sizeof(struct btree_entry));
+    page_t page = current->bt_header.bth_page;
+    nodebuf = *current;
+    while (page != BTREE_PAGE_NULL) {
+        result = btree_insert_entry(f, &nodebuf, &entry, &entrytemp);
+        assert(result == 0);
+        if (entrytemp == )
     }
 
     // Otherwise, we need to split and copy half the entries to the new node.
@@ -785,6 +820,7 @@ btree_insert(struct column *col, struct btree_entry *entry)
     nodebuf.bt_header.bth_nentries = 1;
     nodebuf.bt_header.bth_page = newpage;
     nodebuf.bt_header.bth_left = rootbuf.bt_header.bth_page;
+    nodebuf.bt_header.bth_next = BTREE_PAGE_NULL;
     nodebuf.bt_entries[0] = entrybuf;
     result = btree_node_synch(col->col_index_file, &nodebuf);
     assert(result == 0);

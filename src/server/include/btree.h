@@ -32,12 +32,9 @@ CASSERT(PAGESIZE % sizeof(struct btree_entry) == 0);
 struct btree_header {
     enum btree_node_type bth_type;
     uint32_t bth_nentries; // num entries in this node
-    union {
-        page_t bth_next; // used for LEAF nodes
-        page_t bth_left; // used for INTERNAL nodes
-    };
+    page_t bth_next;
+    page_t bth_left; // used for INTERNAL nodes
     uint64_t bth_page; // page this node lives on
-    uint64_t bth_padding; // padding
 };
 
 CASSERT(sizeof(struct btree_header) % sizeof(struct btree_entry) == 0);
