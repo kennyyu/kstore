@@ -1,0 +1,84 @@
+Kenny Yu
+30798260
+CS165, Project 2
+Performance Report
+
+Limits of my design
+===================
+
+## Number of tuples
+
+My system uses a uint64_t to represent the number of tuples
+in a column, however, my page allocator for files only
+allows a maximum of 4096 * 8 bits, where each bit
+represents a page size (4096 bytes), for a total
+column size of 4GB.
+
+The first page of every file is reserved for the
+bitmap allocator, thus each file can only store
+4GB - 4KB of payload.
+
+For unsorted entries, each entry is just a 32-bit int,
+so the maximuum number of tuples for an unsorted column
+will be 1073740800.
+
+For sorted and btree columns, in addition to storing
+the index, I also store a copy of the data
+in an unsorted format to allow for fast retrievals
+with virtual ids (the row id).
+
+For a sorted column, each entry is 16 bytes in length,
+4 bytes for the value, 8 bytes for the uint64_t row
+index, and 4 bytes of padding to be page/cache
+aligned. This gives us a maximum number of tuples
+for a sorted column to be 268435200.
+
+For a btree column, each btree entry is 16 bytes in size,
+and the first 32 bytes of every btree node is reserved
+for the header data for that btree node's page. Thus,
+each node can store up to (4096 - 32) / 16 = 254 entries.
+
+With (2^12 * 2^8) - 1 possible pages for a file representing
+the btree index, we can store up to 266338050 tuples
+for a btree column.
+
+## Number of concurrent connections
+
+I made my design with synchronization in mind. Reads and
+mutations use reader-writer locks, allowing any number
+of readers and one writer at a time.
+
+The maximum number of supported concurrent connections
+is determined by the number of threads in the threadpool
+(default = 16, but this can be changed at the command
+line). Each client's session is supported by exactly
+one thread.
+
+## Biggest Challenge
+
+The biggest challenge I faced was designing the appropriate
+on-disk data structure representations for all the different
+column storage types.
+
+By making everything fit onto a page and using enumerations
+and unions to make everything compact, I was able to
+efficiently represent a btree node. Furthermore, by designing
+the right API for myself to read from disk (I always read
+in units of pages), my code for reading/writing is
+much easier to reason about.
+
+## Extending Current Design
+
+To extend my current design, e.g. for joins and aggregations,
+I would first extend my parser to support new keywords. Furthermore
+I would need to add new operators to my server_eval
+function to handle the query types, and create new rpc_write/read_*
+functions to serialize/deserialize the results across
+a network connection.
+
+Joins would not change much existing code--I would only need to
+add a new function that takes two tuplearrays and joins
+the tuples based on the first column.
+
+Aggregations would take a column_vals and spit out a singleton
+column_val.
