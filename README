@@ -1,0 +1,87 @@
+Kenny Yu
+CS165 - Column Store
+
+Building the client and server
+==============================
+
+To build the client and server:
+
+    make
+
+This should create the `server` and `client` binaries in the top level
+directory.
+
+To run my own unit tests:
+
+    make test
+
+This will create a `testbin` directory with the test executables,
+and execute them.
+
+Running the client and server
+=============================
+
+To see available options on the client and server, run
+each of them with the `--help` flag:
+
+    ./server --help
+    ./client --help
+
+## Server options:
+
+Here are the options on the server:
+
+    Usage: ./server
+    --help
+    --port P        [default=5000]    port to start the server
+    --backlog B     [default=16]      backlog for accepting connections
+    --nthreads T    [default=16]      number of threads for threadpool
+    --dbdir dir     [default=db]      directory for column storage
+                                      if the directory already exists,
+                                      the database storage will be initialized
+                                      with the data from that directory.
+
+## Client options:
+
+Here are the options on the client:
+
+    Usage: ./client
+    --help
+    --port P        [default=5000]       port of the server
+    --host H        [default=localhost]  host of the server
+    --loaddir dir    [default=p2tests]   directory containing the csv files
+                                         referenced in tests.
+                                         For project2, this should be p2tests.
+    --interactive                        Run in interactive mode
+
+Running tests
+=============
+
+To run all the end-to-end tests [the server must already be running]:
+
+    ./test.sh testdir
+
+Example:
+
+    ./test.sh p2tests
+
+Output:
+
+    storing output in tmp.14047/
+    [PASS] p2tests/p2test-tuples.txt
+    [PASS] p2tests/p2test1a.txt
+    [PASS] p2tests/p2test1b.txt
+    [PASS] p2tests/p2test1c.txt
+    [PASS] p2tests/p2test2.txt
+    [PASS] p2tests/p2test3.txt
+    [PASS] p2tests/p2test4.txt
+    [PASS--Same lines in different order] p2tests/p2test5.txt
+    [PASS] p2tests/p2test6.txt
+
+This will find all the `.txt` files in the provided `testdir` directory,
+sort them, and then spawn clients, feeding the text file as input.
+The runner will create a randomly-generated temporary directory
+to store all outputs, and then diff the output against the
+`.expected` files in the `testdir` directory. For outputs
+that return values/tuples in a different order, the script
+will first sort the expected and actual outputs before diffing.
