@@ -22,11 +22,11 @@ char *op_type_string(enum op_type op_type) {
 }
 char *op_string(struct op *op) {
     char *stype;
-    char *buf = malloc(sizeof(char) * 2048);
+    char *buf = malloc(sizeof(char) * TUPLELEN);
     if (buf == NULL) {
         goto done;
     }
-    bzero(buf, 2048);
+    bzero(buf, TUPLELEN);
 
     switch (op->op_type) {
     case OP_SELECT_ALL_ASSIGN:

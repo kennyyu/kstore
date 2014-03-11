@@ -1276,10 +1276,8 @@ column_fetch(struct column *col, struct column_ids *ids)
     free(cvals);
     cvals = NULL;
   cleanup_vals:
-    while (valarray_num(vals) > 0) {
-        // no need to free the values because they're just ints
-        valarray_remove(vals, 0);
-    }
+    // no need to free the values because they're just ints
+    vals->arr.num = 0;
     valarray_destroy(vals);
   done:
     rwlock_release(col->col_rwlock);

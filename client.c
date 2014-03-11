@@ -66,8 +66,8 @@ int
 parse_stdin(int readfd, int writefd)
 {
     int result;
-    char buf[BUFSIZE];
-    bzero(buf, BUFSIZE);
+    char buf[TUPLELEN];
+    bzero(buf, TUPLELEN);
     result = 0;
     unsigned ix = 0;
     while (1) {

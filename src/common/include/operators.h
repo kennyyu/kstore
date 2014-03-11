@@ -2,6 +2,7 @@
 #define _OPERATORS_H_
 
 #define COLUMNLEN 256
+#define TUPLELEN 16384
 
 enum op_type {
     OP_SELECT_ALL_ASSIGN,
@@ -25,7 +26,7 @@ enum storage_type {
 };
 
 struct op_tuple {
-    char op_tuple_vars[COLUMNLEN];
+    char op_tuple_vars[TUPLELEN];
 };
 
 // struct for all the select queries

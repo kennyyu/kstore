@@ -12,7 +12,7 @@ mkdir -p $TMP
 echo "storing output in $TMP/"
 
 testdir=$1
-tests=`ls "$testdir"/*.txt`
+tests=`ls "$testdir"/*.txt | sort`
 for t in $tests
 do
     base=`basename $t .txt`
