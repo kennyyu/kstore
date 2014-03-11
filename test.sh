@@ -18,13 +18,24 @@ do
     base=`basename $t .txt`
     expected="$testdir/$base.expected"
     mine="$TMP/$base.me"
+    difffile="$TMP/$base.diff"
     ./client < $t > $mine
     results=`diff $expected $mine`
     if [ -z "$results" ]
     then
         echo "[PASS] $t"
     else
-        echo "[FAIL] $t"
-        echo "       $results"
+        # try to compare the lines in different order
+        cat $mine | sort > $mine.sorted
+        cat $expected | sort > $TMP/$base.expected.sorted
+        resultssorted=`diff $TMP/$base.expected.sorted $mine.sorted`
+        if [ -z "$resultssorted" ]
+        then
+            echo "[PASS--Same lines in different order] $t"
+        else
+            echo "[FAIL] $t"
+            echo "$results"
+            echo "$results" > $difffile
+        fi
     fi
 done
