@@ -1,6 +1,14 @@
 Kenny Yu
 CS165 - Column Store
 
+NOTES
+=====
+
+This **CANNOT** be built on Mac OSX because OSX does not implement the
+`sem_init()` and `sem_destroy()` functions, which I need for
+my threadpool implementation.
+
+
 Building the client and server
 ==============================
 
@@ -17,6 +25,8 @@ To run my own unit tests:
 
 This will create a `testbin` directory with the test executables,
 and execute them.
+
+
 
 Running the client and server
 =============================
@@ -49,10 +59,12 @@ Here are the options on the client:
     --help
     --port P        [default=5000]       port of the server
     --host H        [default=localhost]  host of the server
-    --loaddir dir    [default=p2tests]   directory containing the csv files
+    --loaddir dir   [default=p2tests]    directory containing the csv files
                                          referenced in tests.
                                          For project2, this should be p2tests.
     --interactive                        Run in interactive mode
+
+
 
 Running tests
 =============
