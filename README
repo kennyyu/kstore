@@ -4,9 +4,17 @@ CS165 - Column Store
 NOTES
 =====
 
-This **CANNOT** be built on Mac OSX because OSX does not implement the
-`sem_init()` and `sem_destroy()` functions, which I need for
-my threadpool implementation.
+* This **CANNOT** be built on Mac OSX because OSX does not implement the
+  `sem_init()` and `sem_destroy()` functions, which I need for
+  my threadpool implementation.
+
+* Since p2test1c.txt inserts (instead of loading)
+  values into t1a, t2a, t2c without inserting
+  corresponding values into the other columns of that table, then
+  after running p2test1c.txt, we can no longer run p2test1a.txt and
+  p2test1b.txt because there will be rows with extra t1a, t2a, and t2c
+  values, breaking the assertion that the selections always return
+  the same number of items.
 
 
 Building the client and server
