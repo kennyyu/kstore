@@ -38,7 +38,7 @@ void dberror_log(char *msg,
                  int line,
                  const char *func);
 
-#define DBLOG(result) dberror_log(dberror_string((result)), __FILE__, __LINE__, __func__);
+#define DBLOG(result) dberror_log((char *) dberror_string((result)), __FILE__, __LINE__, __func__);
 
 CASSERT(DBSUCCESS == 0);
 

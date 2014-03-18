@@ -11,6 +11,7 @@
 #include <stdlib.h>
 #include "include/rpc.h"
 #include "include/io.h"
+#include "include/try.h"
 #include "include/operators.h"
 #include "include/parser.h"
 #include "include/dberror.h"
@@ -54,10 +55,7 @@ rpc_write_header(int fd, struct rpc_header *message)
     networkmsg.rpc_type = htonl(message->rpc_type);
     networkmsg.rpc_magic = htonl(message->rpc_magic);
     networkmsg.rpc_len = hton64(message->rpc_len);
-    result = io_write(fd, (void *) &networkmsg, sizeof(struct rpc_header));
-    if (result) {
-        goto done;
-    }
+    TRY(result, io_write(fd, (void *) &networkmsg, sizeof(struct rpc_header)), done);
     result = 0;
   done:
     return result;
@@ -80,10 +78,7 @@ rpc_read_header(int fd, struct rpc_header *message)
 
     int result;
     struct rpc_header networkmsg;
-    result = io_read(fd, (void *) &networkmsg, sizeof(struct rpc_header));
-    if (result) {
-        goto done;
-    }
+    TRY(result, io_read(fd, (void *) &networkmsg, sizeof(struct rpc_header)), done);
     message->rpc_type = ntohl(networkmsg.rpc_type);
     message->rpc_magic = ntohl(networkmsg.rpc_magic);
     message->rpc_len = ntoh64(networkmsg.rpc_len);
@@ -103,14 +98,8 @@ rpc_write_query(int fd, struct op *op)
     msg.rpc_type = RPC_QUERY;
     msg.rpc_magic = RPC_HEADER_MAGIC;
     msg.rpc_len = strlen(query) + 1; // +1 for the null byte
-    result = rpc_write_header(fd, &msg);
-    if (result) {
-        goto cleanup_query;
-    }
-    result = io_write(fd, query, msg.rpc_len);
-    if (result) {
-        goto cleanup_query;
-    }
+    TRY(result, rpc_write_header(fd, &msg), cleanup_query);
+    TRY(result, io_write(fd, query, msg.rpc_len), cleanup_query);
     result = 0;
     goto cleanup_query;
 
@@ -128,20 +117,13 @@ rpc_read_query(int fd, struct rpc_header *msg, struct op **retop)
     assert(msg->rpc_type == RPC_QUERY);
 
     int result;
-    char *payload = malloc(sizeof(char) * msg->rpc_len); // includes null byte
-    if (payload == NULL) {
-        result = DBENOMEM;
-        goto done;
-    }
-    result = io_read(fd, payload, msg->rpc_len);
-    if (result) {
-        goto cleanup_payload;
-    }
-    struct op *op = parse_line(payload);
-    if (op == NULL) {
-        result = DBENOMEM;
-        goto cleanup_payload;
-    }
+    char *payload;
+    struct op *op;
+
+    // includes null byte
+    TRYNULL(result, DBENOMEM, payload, malloc(sizeof(char) * msg->rpc_len), done);
+    TRY(result, io_read(fd, payload, msg->rpc_len), cleanup_payload);
+    TRYNULL(result, DBENOMEM, op, parse_line(payload), cleanup_payload);
 
     // success
     printf("got query: [%s]\n", payload);
@@ -164,13 +146,11 @@ rpc_read_file(int fd, struct rpc_header *msg, char *filename, int *retfd)
         result = DBEIONOFILE;
         goto done;
     }
-    result = io_copy(fd, copyfd, msg->rpc_len);
-    if (result) {
-        goto cleanup_copyfd;
-    }
+    TRY(result, io_copy(fd, copyfd, msg->rpc_len), cleanup_copyfd);
     // seek back to beginning
     result = lseek(copyfd, 0, SEEK_SET);
     if (result) {
+        result = DBELSEEK;
         goto cleanup_copyfd;
     }
 
@@ -202,14 +182,8 @@ rpc_write_file(int fd, struct op *op)
     msg.rpc_type = RPC_FILE;
     msg.rpc_magic = RPC_HEADER_MAGIC;
     msg.rpc_len = io_size(loadfd);
-    result = rpc_write_header(fd, &msg);
-    if (result) {
-        goto cleanup_loadfd;
-    }
-    result = io_copy(loadfd, fd, msg.rpc_len);
-    if (result) {
-        goto cleanup_loadfd;
-    }
+    TRY(result, rpc_write_header(fd, &msg), cleanup_loadfd);
+    TRY(result, io_copy(loadfd, fd, msg.rpc_len), cleanup_loadfd);
     result = 0;
     goto cleanup_loadfd;
 
@@ -236,16 +210,10 @@ rpc_write_tuple_result(int fd, struct column_vals **tuples, unsigned len)
 
     // Write a tuple at a time
     for (uint64_t tuple = 0; tuple < ntuples; tuple++) {
-        result = rpc_write_header(fd, &msg);
-        if (result) {
-            goto done;
-        }
+        TRY(result, rpc_write_header(fd, &msg), done);
         for (unsigned i = 0; i < len; i++) {
             uint32_t networkint = htonl(tuples[i]->cval_vals[tuple]);
-            result = io_write(fd, &networkint, sizeof(uint32_t));
-            if (result) {
-                goto done;
-            }
+            TRY(result, io_write(fd, &networkint, sizeof(uint32_t)), done);
         }
     }
     result = 0;
@@ -265,17 +233,11 @@ rpc_read_tuple_result(int fd, struct rpc_header *msg,
     int result;
     uint64_t bytes = msg->rpc_len;
     unsigned nints = bytes / sizeof(int);
-    int *tuple = malloc(bytes);
-    if (tuple == NULL) {
-        result = DBENOMEM;
-        goto done;
-    }
+    int *tuple;
+    TRYNULL(result, DBENOMEM, tuple, malloc(bytes), done);
     for (unsigned i = 0; i < nints; i++) {
         int networkint;
-        result = io_read(fd, &networkint, sizeof(int));
-        if (result) {
-            goto cleanup_malloc;
-        }
+        TRY(result, io_read(fd, &networkint, sizeof(int)), cleanup_malloc);
         tuple[i] = ntohl(networkint);
     }
     result = 0;
@@ -297,16 +259,10 @@ rpc_write_fetch_result(int fd, struct column_vals *vals)
     msg.rpc_type = RPC_FETCH_RESULT;
     msg.rpc_magic = RPC_HEADER_MAGIC;
     msg.rpc_len = vals->cval_len * sizeof(int);
-    result = rpc_write_header(fd, &msg);
-    if (result) {
-        goto done;
-    }
+    TRY(result, rpc_write_header(fd, &msg), done);
     for (unsigned i = 0; i < vals->cval_len; i++) {
         uint32_t networkint = htonl(vals->cval_vals[i]);
-        result = io_write(fd, &networkint, sizeof(uint32_t));
-        if (result) {
-            goto done;
-        }
+        TRY(result, io_write(fd, &networkint, sizeof(uint32_t)), done);
     }
     result = 0;
     goto done;
@@ -326,18 +282,12 @@ rpc_read_fetch_result(int fd, struct rpc_header *msg, int **retvals, int *retn)
 
     uint32_t bytes = msg->rpc_len;
     assert(bytes % sizeof(int) == 0);
-    int *vals = malloc(bytes);
-    if (vals == NULL) {
-        result = DBENOMEM;
-        goto done;
-    }
+    int *vals;
+    TRYNULL(result, DBENOMEM, vals, malloc(bytes), done);
     unsigned nvals = bytes / (sizeof(int));
     for (unsigned i = 0; i < nvals; i++) {
         int networkint;
-        result = io_read(fd, &networkint, sizeof(int));
-        if (result) {
-            goto done;
-        }
+        TRY(result, io_read(fd, &networkint, sizeof(int)), done);
         vals[i] = ntohl(networkint);
     }
 
@@ -359,14 +309,9 @@ rpc_write_error(int fd, char *error)
     msg.rpc_type = RPC_ERROR;
     msg.rpc_magic = RPC_HEADER_MAGIC;
     msg.rpc_len = len;
-    int result = rpc_write_header(fd, &msg);
-    if (result) {
-        goto done;
-    }
-    result = io_write(fd, error, len);
-    if (result) {
-        goto done;
-    }
+    int result;
+    TRY(result, rpc_write_header(fd, &msg), done);
+    TRY(result, io_write(fd, error, len), done);
     result = 0;
     goto done;
   done:
@@ -383,19 +328,15 @@ rpc_read_error(int fd, struct rpc_header *msg, char **retmsg)
 
     uint32_t len = msg->rpc_len;
     int result;
-    char *error = malloc(len); // includes space for '\0'
-    if (error == NULL) {
-        result = DBENOMEM;
-        goto done;
-    }
-    result = io_read(fd, error, len);
-    if (result) {
-        goto done;
-    }
+    char *error;
+    TRYNULL(result, DBENOMEM, error, malloc(len), done);
+    TRY(result, io_read(fd, error, len), cleanup_malloc);
     // success
     result = 0;
     *retmsg = error;
     goto done;
+  cleanup_malloc:
+    free(error);
   done:
     return result;
 }

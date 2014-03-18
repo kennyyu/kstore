@@ -3,6 +3,8 @@
 #include <stdlib.h>
 #include <stddef.h>
 #include <string.h>
+#include "include/try.h"
+#include "include/dberror.h"
 #include "include/operators.h"
 
 char *op_type_string(enum op_type op_type) {
@@ -21,11 +23,10 @@ char *op_type_string(enum op_type op_type) {
     }
 }
 char *op_string(struct op *op) {
+    int result;
     char *stype;
-    char *buf = malloc(sizeof(char) * TUPLELEN);
-    if (buf == NULL) {
-        goto done;
-    }
+    char *buf;
+    TRYNULL(result, DBENOMEM, buf, malloc(sizeof(char) * TUPLELEN), done);
     bzero(buf, TUPLELEN);
 
     switch (op->op_type) {
