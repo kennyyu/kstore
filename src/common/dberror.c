@@ -43,6 +43,6 @@ dberror_log(char *msg,
             int line,
             const char *func)
 {
-    fprintf(stderr, "[ERROR: %s] %s:%d:%s",
+    fprintf(stderr, "[ERROR: %s] %s:%d:%s\n",
             msg, file, line, func);
 }

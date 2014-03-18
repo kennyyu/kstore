@@ -5,7 +5,8 @@
 #include <stdio.h>
 #include <string.h>
 #include <regex.h>
-#include "../common/include/array.h"
+#include "include/array.h"
+#include "include/try.h"
 #include "include/operators.h"
 #include "include/parser.h"
 
@@ -20,21 +21,16 @@ add_string(struct stringarray *vec, char *query, unsigned start, unsigned end)
 {
     int result = 0;
     // create space for the chars + 1 for '\0'
-    char *line = malloc(sizeof(char) * (end - start + 1));
-    if (line == NULL) {
-        result = ENOMEM;
-        goto done;
-    }
+    char *line;
+    TRYNULL(result, DBENOMEM, line, malloc(sizeof(char) * (end - start + 1)), done);
     memcpy(line, &query[start], end - start);
     line[end] = '\0';
-    result = stringarray_add(vec, line, NULL);
-    if (result) {
-        free(line);
-        goto done;
-    }
+    TRY(result, stringarray_add(vec, line, NULL), cleanup_malloc);
     result = 0;
     goto done;
 
+  cleanup_malloc:
+    free(line);
   done:
     return result;
 }
@@ -44,19 +40,14 @@ struct stringarray *
 parse_split_lines(char *query)
 {
     int result;
-    struct stringarray *vec = stringarray_create();
-    if (vec == NULL) {
-        goto done;
-    }
+    struct stringarray *vec = NULL;
+    TRYNULL(result, DBENOMEM, vec, stringarray_create(), done);
     unsigned start = 0;
     unsigned next = 0;
     char c;
     while ((c = query[next]) != '\0') {
         if (c == '\n') {
-            result = add_string(vec, query, start, next);
-            if (result) {
-                goto cleanup_vec;
-            }
+            TRY(result, add_string(vec, query, start, next), cleanup_vec);
             start = ++next;
         } else {
             next++;
@@ -65,10 +56,7 @@ parse_split_lines(char *query)
     if (next == start) {
         goto done;
     }
-    result = add_string(vec, query, start, next);
-    if (result) {
-        goto cleanup_vec;
-    }
+    TRY(result, add_string(vec, query, start, next), cleanup_vec);
     goto done;
 
   cleanup_vec:
@@ -85,10 +73,9 @@ parse_split_lines(char *query)
 struct op *
 parse_line(char *line)
 {
-    struct op *op = malloc(sizeof(struct op));
-    if (op == NULL) {
-        goto done;
-    }
+    int result;
+    struct op *op;
+    TRYNULL(result, DBENOMEM, op, malloc(sizeof(struct op)), done);
     char stype_buf[16];
 
     // Because scanf is greedy, we need to put the select
@@ -213,24 +200,15 @@ parse_query(char *query)
 {
     int result;
     struct oparray *ops = NULL;
+    struct stringarray *lines = NULL;
 
-    struct stringarray *lines = parse_split_lines(query);
-    if (lines == NULL) {
-        goto done;
-    }
-    ops = oparray_create();
-    if (ops == NULL) {
-        goto cleanup_lines;
-    }
+    TRYNULL(result, DBENOMEM, lines, parse_split_lines(query), done);
+    TRYNULL(result, DBENOMEM, ops, oparray_create(), cleanup_lines);
     for (unsigned i = 0; i < stringarray_num(lines); i++) {
-        struct op *op = parse_line(stringarray_get(lines, i));
-        if (op == NULL) {
-            goto cleanup_oparray;
-        }
-        result = oparray_add(ops, op, NULL);
-        if (result) {
-            goto cleanup_oparray;
-        }
+        struct op *op;
+        TRYNULL(result, DBEPARSE, op,
+                parse_line(stringarray_get(lines, i)), cleanup_oparray);
+        TRY(result, oparray_add(ops, op, NULL), cleanup_oparray);
     }
     goto cleanup_lines;
 
