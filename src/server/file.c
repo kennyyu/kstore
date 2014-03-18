@@ -8,6 +8,7 @@
 #include <unistd.h>
 #include <errno.h>
 #include "include/file.h"
+#include "../../common/include/dberror.h"
 #include "../../common/include/io.h"
 #include "../../common/include/bitmap.h"
 
@@ -150,7 +151,7 @@ file_read(struct file *f, page_t page, void *buf)
     bzero(buf, PAGESIZE);
     int result = pread(f->f_fd, buf, PAGESIZE, page * PAGESIZE);
     if (result == -1 || result == 0) {
-        return -1;
+        return DBEIOCHECKERRNO;
     }
     assert(result == PAGESIZE);
     return 0;
@@ -165,7 +166,7 @@ file_write(struct file *f, page_t page, void *buf) {
 
     int result = pwrite(f->f_fd, buf, PAGESIZE, page * PAGESIZE);
     if (result == -1 || result == 0) {
-        return -1;
+        return DBEIOCHECKERRNO;
     }
     assert(result == PAGESIZE);
     return 0;

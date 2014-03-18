@@ -6,6 +6,7 @@
 #include <fcntl.h>
 #include "include/csv.h"
 #include "include/array.h"
+#include "include/dberror.h"
 
 DEFARRAY_BYTYPE(intarray, int, /* no inline */);
 
@@ -32,16 +33,20 @@ struct csv_resultarray *
 csv_parse(int fd)
 {
     int result;
+    struct csv_resultarray *results = NULL;
     result = lseek(fd, 0, SEEK_SET);
     if (result) {
+        result = DBELSEEK;
         goto done;
     }
     FILE *file = fdopen(fd, "r");
     if (file == NULL) {
+        result = DBEIONOFILE;
         goto done;
     }
-    struct csv_resultarray *results = csv_resultarray_create();
+    results = csv_resultarray_create();
     if (results == NULL) {
+        result = DBENOMEM;
         goto cleanup_file;
     }
 
@@ -54,14 +59,17 @@ csv_parse(int fd)
             buf[ix] = '\0';
             struct csv_result *header = malloc(sizeof(struct csv_result));
             if (header == NULL) {
+                result = DBENOMEM;
                 goto free_csv_resultarray;
             }
             header->csv_vals = intarray_create();
             if (header->csv_vals == NULL) {
+                result = DBENOMEM;
                 goto free_csv_resultarray;
             }
             result = csv_resultarray_add(results, header, NULL);
             if (result) {
+                result = DBENOMEM;
                 goto free_csv_resultarray;
             }
             strcpy(header->csv_colname, buf);

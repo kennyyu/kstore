@@ -34,6 +34,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "include/array.h"
+#include "include/dberror.h"
 
 struct array *
 array_create(void) {
@@ -89,7 +90,7 @@ int array_setsize(struct array *a, unsigned num) {
 
         newptr = malloc(newmax * sizeof(*a->v));
         if (newptr == NULL) {
-            return ENOMEM;
+            return DBENOMEM;
         }
         memcpy(newptr, a->v, a->num * sizeof(*a->v));
         free(a->v);

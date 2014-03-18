@@ -19,6 +19,7 @@
 #include "src/common/include/operators.h"
 #include "src/common/include/parser.h"
 #include "src/common/include/io.h"
+#include "src/common/include/dberror.h"
 
 // boolean to tell the client to keep looping
 static bool volatile keep_running = true;
@@ -73,7 +74,7 @@ parse_stdin(int readfd, int writefd)
     while (1) {
         result = read(readfd, buf + ix, 1);
         if (result == -1 || result == 0) {
-            result = -1;
+            result = DBEIOCHECKERRNO;
             goto done;
         }
         ix++;
@@ -83,7 +84,7 @@ parse_stdin(int readfd, int writefd)
     }
     struct oparray *ops = parse_query(buf);
     if (ops == NULL) {
-        result = -1;
+        result = DBENOMEM;
         goto done;
     }
     for (unsigned i = 0; i < oparray_num(ops); i++) {
@@ -199,7 +200,7 @@ parse_sockfd(int readfd, int writefd)
         if (client_options.copt_interactive) {
             fprintf(stderr, "Received TERMINATE from server\n");
         }
-        result = -1;
+        result = DBESERVERTERM;
         break;
     case RPC_FETCH_RESULT:
         result = client_handle_fetch(readfd, writefd, &msg);
@@ -275,7 +276,7 @@ main(int argc, char **argv)
     result = getaddrinfo(client_options.copt_host, portbuf, &hints, &servinfo);
     if (result != 0) {
         perror("getaddrinfo");
-        result = -1;
+        result = DBEGETADDRINFO;
         goto done;
     }
 
@@ -284,7 +285,7 @@ main(int argc, char **argv)
                     servinfo->ai_protocol);
     if (sockfd == -1) {
         perror("socket");
-        result = -1;
+        result = DBESOCKET;
         goto done;
     }
     freeaddrinfo(servinfo);
@@ -293,6 +294,7 @@ main(int argc, char **argv)
     result = connect(sockfd, servinfo->ai_addr, servinfo->ai_addrlen);
     if (result == -1) {
         perror("connect");
+        result = DBECONNECT;
         goto cleanup_sockfd;
     }
 
@@ -304,6 +306,7 @@ main(int argc, char **argv)
     result = sigaction( SIGINT, &sig, NULL );
     if (result == -1) {
         perror("sigaction");
+        result = DBESIGACTION;
         goto done;
     }
 
@@ -325,6 +328,7 @@ main(int argc, char **argv)
         result = select(sockfd + 1, &readfds, NULL, NULL, NULL);
         if (result == -1) {
             perror("select");
+            result = DBESELECT;
             goto cleanup_sockfd;
         }
 

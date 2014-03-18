@@ -13,6 +13,7 @@
 #include "include/io.h"
 #include "include/operators.h"
 #include "include/parser.h"
+#include "include/dberror.h"
 
 // 64 bit conversion taken from:
 // http://stackoverflow.com/questions/809902/64-bit-ntohl-in-c
@@ -129,6 +130,7 @@ rpc_read_query(int fd, struct rpc_header *msg, struct op **retop)
     int result;
     char *payload = malloc(sizeof(char) * msg->rpc_len); // includes null byte
     if (payload == NULL) {
+        result = DBENOMEM;
         goto done;
     }
     result = io_read(fd, payload, msg->rpc_len);
@@ -137,7 +139,7 @@ rpc_read_query(int fd, struct rpc_header *msg, struct op **retop)
     }
     struct op *op = parse_line(payload);
     if (op == NULL) {
-        result = -1;
+        result = DBENOMEM;
         goto cleanup_payload;
     }
 
@@ -159,7 +161,7 @@ rpc_read_file(int fd, struct rpc_header *msg, char *filename, int *retfd)
     int result;
     int copyfd = open(filename, O_CREAT | O_RDWR | O_TRUNC, S_IRWXU);
     if (copyfd == -1) {
-        result = -1;
+        result = DBEIONOFILE;
         goto done;
     }
     result = io_copy(fd, copyfd, msg->rpc_len);
@@ -194,7 +196,7 @@ rpc_write_file(int fd, struct op *op)
     char *fname = op->op_load.op_load_file;
     int loadfd = open(fname, O_RDONLY);
     if (loadfd == -1) {
-        result = -1;
+        result = DBEIONOFILE;
         goto done;
     }
     msg.rpc_type = RPC_FILE;
@@ -265,7 +267,7 @@ rpc_read_tuple_result(int fd, struct rpc_header *msg,
     unsigned nints = bytes / sizeof(int);
     int *tuple = malloc(bytes);
     if (tuple == NULL) {
-        result = -1;
+        result = DBENOMEM;
         goto done;
     }
     for (unsigned i = 0; i < nints; i++) {
@@ -326,7 +328,7 @@ rpc_read_fetch_result(int fd, struct rpc_header *msg, int **retvals, int *retn)
     assert(bytes % sizeof(int) == 0);
     int *vals = malloc(bytes);
     if (vals == NULL) {
-        result = -1;
+        result = DBENOMEM;
         goto done;
     }
     unsigned nvals = bytes / (sizeof(int));
@@ -383,7 +385,7 @@ rpc_read_error(int fd, struct rpc_header *msg, char **retmsg)
     int result;
     char *error = malloc(len); // includes space for '\0'
     if (error == NULL) {
-        result = -1;
+        result = DBENOMEM;
         goto done;
     }
     result = io_read(fd, error, len);

@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <stddef.h>
 #include <errno.h>
+#include "include/dberror.h"
 #include "include/list.h"
 
 struct listnode {
@@ -57,7 +58,7 @@ list_addhead(struct list *lst, void *item)
     int result;
     struct listnode *lnode = malloc(sizeof(struct listnode));
     if (lnode == NULL) {
-        result = ENOMEM;
+        result = DBENOMEM;
         goto done;
     }
     lnode->ln_item = item;
@@ -80,7 +81,7 @@ list_addtail(struct list *lst, void *item)
     int result;
     struct listnode *lnode = malloc(sizeof(struct listnode));
     if (lnode == NULL) {
-        result = ENOMEM;
+        result = DBENOMEM;
         goto done;
     }
     lnode->ln_item = item;

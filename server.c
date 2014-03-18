@@ -19,6 +19,7 @@
 #include "src/common/include/array.h"
 #include "src/common/include/csv.h"
 #include "src/common/include/search.h"
+#include "src/common/include/dberror.h"
 #include "src/server/include/storage.h"
 
 #define PORT 5000
@@ -161,7 +162,7 @@ server_eval_load(struct server_jobctx *jobctx, struct op *op)
     // parse the csv
     struct csv_resultarray *results = csv_parse(csvfd);
     if (results == NULL) {
-        result = -1;
+        result = DBECSV;
         goto done;
     }
 
@@ -233,7 +234,7 @@ server_add_var(struct vartuplearray *env, char *varname,
         // need to create it
         vtuple = malloc(sizeof(struct vartuple));
         if (vtuple == NULL) {
-            result = -1;
+            result = DBENOMEM;
             goto done;
         }
         should_cleanup_vtuple_on_err = true;
@@ -294,12 +295,12 @@ server_eval_select(struct server_jobctx *jobctx, struct op *op)
     struct column *col =
             column_open(jobctx->sj_storage, op->op_select.op_sel_col);
     if (col == NULL) {
-        result = -1;
+        result = DBECOLOPEN;
         goto done;
     }
     struct column_ids *ids = column_select(col, op);
     if (ids == NULL) {
-        result = -1;
+        result = DBECOLSELECT;
         goto cleanup_col;
     }
 
@@ -346,21 +347,21 @@ server_eval_fetch(struct server_jobctx *jobctx, struct op *op)
     struct column *col =
             column_open(jobctx->sj_storage, op->op_fetch.op_fetch_col);
     if (col == NULL) {
-        result = -1;
+        result = DBECOLOPEN;
         goto done;
     }
     // find the variable representing the positions
     struct vartuple *v =
             server_eval_get_var(jobctx->sj_env, op->op_fetch.op_fetch_pos);
     if (v == NULL) {
-        result = -1; // couldn't find var
+        result = DBENOVAR; // couldn't find var
         goto cleanup_col;
     }
     assert(v->vt_type == VAR_IDS);
     // now that we have the ids, let's fetch the values for those ids
     struct column_vals *vals = column_fetch(col, v->vt_column_ids);
     if (vals == NULL) {
-        result = -1;
+        result = DBECOLFETCH;
         goto cleanup_col;
     }
 
@@ -409,7 +410,7 @@ server_eval_insert(struct server_jobctx *jobctx, struct op *op)
     struct column *col =
             column_open(jobctx->sj_storage, op->op_insert.op_insert_col);
     if (col == NULL) {
-        result = -1;
+        result = DBECOLOPEN;
         goto done;
     }
     result = column_insert(col, op->op_insert.op_insert_val);
@@ -455,7 +456,7 @@ server_eval_tuple(struct server_jobctx *jobctx, struct op *op)
     int result;
     struct column_valsarray *tuples = column_valsarray_create();
     if (tuples == NULL) {
-        result = -1;
+        result = DBENOMEM;
         goto done;
     }
     const char *delimiters = ",";
@@ -467,7 +468,7 @@ server_eval_tuple(struct server_jobctx *jobctx, struct op *op)
     while (pch != NULL) {
         struct vartuple *v = server_eval_get_var(jobctx->sj_env, pch);
         if (v == NULL) {
-            result = -1;
+            result = DBENOVAR;
             goto cleanup_valsarray;
         }
         assert(v->vt_type == VAR_VALS);
@@ -679,7 +680,7 @@ main(int argc, char **argv)
     result = getaddrinfo(NULL, portbuf, &hints, &servinfo);
     if (result != 0) {
         perror("getaddrinfo");
-        result = -1;
+        result = DBEGETADDRINFO;
         goto done;
     }
 
@@ -688,7 +689,7 @@ main(int argc, char **argv)
                       servinfo->ai_protocol);
     if (listenfd == -1) {
         perror("socket");
-        result = listenfd;
+        result = DBESOCKET;
         goto done;
     }
 
@@ -696,6 +697,7 @@ main(int argc, char **argv)
     result = setsockopt(listenfd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int));
     if (result == -1) {
         perror("setsockopt");
+        result = DBESETSOCKOPT;
         goto cleanup_listenfd;
     }
 
@@ -703,6 +705,7 @@ main(int argc, char **argv)
     result = bind(listenfd, servinfo->ai_addr, servinfo->ai_addrlen);
     if (result == -1) {
         perror("bind");
+        result = DBEBIND;
         goto cleanup_listenfd;
     }
     freeaddrinfo(servinfo);
@@ -711,6 +714,7 @@ main(int argc, char **argv)
     result = listen(listenfd, server_options.sopt_backlog);
     if (result == -1) {
         perror("listen");
+        result = DBELISTEN;
         goto cleanup_listenfd;
     }
 
@@ -722,6 +726,7 @@ main(int argc, char **argv)
     result = sigaction( SIGINT, &sig, NULL );
     if (result == -1) {
         perror("sigaction");
+        result = DBESIGACTION;
         goto done;
     }
 
@@ -745,6 +750,7 @@ main(int argc, char **argv)
         acceptfd = accept(listenfd, NULL, NULL);
         if (acceptfd == -1) {
             perror("accept");
+            result = DBEACCEPT;
             goto shutdown;
         }
 

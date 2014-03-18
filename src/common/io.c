@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <sys/stat.h>
+#include "include/dberror.h"
 #include "include/io.h"
 
 #define BUFSIZE 4096
@@ -15,7 +16,7 @@ enum io_type {
 };
 
 static
-enum io_result
+int
 io_readwrite(int fd, void *buf, int nbytes, enum io_type rw)
 {
     int result;
@@ -29,31 +30,31 @@ io_readwrite(int fd, void *buf, int nbytes, enum io_type rw)
         }
         switch (result) {
         case 0:
-            return IO_EARLY_EOF;
+            return DBEIOEARLYEOF;
         case -1:
-            return IO_CHECK_ERRNO;
+            return DBEIOCHECKERRNO;
         default:
             total += result;
             break;
         }
     }
     assert(total == nbytes);
-    return IO_SUCCESS;
+    return 0;
 }
 
-enum io_result
+int
 io_read(int fd, void *buf, int nbytes)
 {
     return io_readwrite(fd, buf, nbytes, IO_READ);
 }
 
-enum io_result
+int
 io_write(int fd, void *buf, int nbytes)
 {
     return io_readwrite(fd, buf, nbytes, IO_WRITE);
 }
 
-enum io_result
+int
 io_copy(int readfd, int writefd, uint64_t expected_bytes)
 {
     uint64_t total = 0;
@@ -66,12 +67,12 @@ io_copy(int readfd, int writefd, uint64_t expected_bytes)
         total += nr;
     }
     if (nr == -1) {
-        return IO_CHECK_ERRNO;
+        return DBEIOCHECKERRNO;
     }
     if (nr == 0 && (total != expected_bytes)) {
-        return IO_EARLY_EOF;
+        return DBEIOEARLYEOF;
     }
-    return IO_SUCCESS;
+    return 0;
 }
 
 uint64_t

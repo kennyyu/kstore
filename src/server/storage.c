@@ -15,6 +15,7 @@
 #include "../common/include/array.h"
 #include "../common/include/synch.h"
 #include "../common/include/search.h"
+#include "../common/include/dberror.h"
 
 #define METADATA_FILENAME "metadata"
 
@@ -32,7 +33,7 @@ storage_init(char *dbdir)
     int result;
     struct storage *storage = malloc(sizeof(struct storage));
     if (storage == NULL) {
-        result = -1;
+        result = DBENOMEM;
         goto done;
     }
     strcpy(storage->st_dbdir, dbdir);
@@ -239,7 +240,7 @@ storage_add_column(struct storage *storage, char *colname,
     sprintf(filenamebuf, "%s/%s.column", storage->st_dbdir, colname);
     struct file *colfile = file_open(filenamebuf);
     if (colfile == NULL) {
-        result = -1;
+        result = DBEFILE;
         goto done;
     }
     file_close(colfile);
@@ -257,7 +258,7 @@ storage_add_column(struct storage *storage, char *colname,
         }
         struct file *colindexfile = file_open(indexnamebuf);
         if (colindexfile == NULL) {
-            result = -1;
+            result = DBEFILE;
             goto cleanup_file;
         }
         if (stype == STORAGE_BTREE) {
@@ -1333,7 +1334,7 @@ column_load_index_sorted(struct file *f, int *vals, uint64_t num)
     struct column_entry_sorted *entries =
             malloc(num * sizeof(struct column_entry_sorted));
     if (entries == NULL) {
-        result = -1;
+        result = DBENOMEM;
         goto done;
     }
     for (uint64_t i = 0; i < num; i++) {
