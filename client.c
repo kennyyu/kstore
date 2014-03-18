@@ -141,7 +141,7 @@ client_handle_error(int readfd, int writefd, struct rpc_header *msg)
     int result;
     TRY(result, rpc_read_error(readfd, msg, &error), done);
     assert(error != NULL);
-    printf("ERROR: %s\n", error);
+    printf("[SERVER ERROR: %s]\n", error);
     free(error);
 
     result = 0;
@@ -327,7 +327,7 @@ main(int argc, char **argv)
             result = parse_stdin(STDIN_FILENO, sockfd);
             if (result) {
                 if (client_options.copt_interactive) {
-                    fprintf(stderr, "ERROR: client error\n");
+                    DBLOG(result);
                 }
                 // if stdin is done, send a connection termination message
                 // to the server
