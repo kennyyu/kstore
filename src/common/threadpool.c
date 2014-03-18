@@ -7,6 +7,8 @@
 #include "include/synch.h"
 #include "include/list.h"
 #include "include/threadpool.h"
+#include "include/try.h"
+#include "include/dberror.h"
 
 DECLLIST(job);
 DEFLIST(job);
@@ -100,35 +102,21 @@ thread_worker(void *arg)
 struct threadpool *
 threadpool_create(unsigned nthreads)
 {
-    struct threadpool *tpool = malloc(sizeof(struct threadpool));
-    if (tpool == NULL) {
-        return NULL;
-    }
-    tpool->tp_threads = malloc(nthreads * sizeof(pthread_t));
-    if (tpool->tp_threads == NULL) {
-        goto cleanup_tpool;
-    }
-    tpool->tp_jobs = joblist_create();
-    if (tpool->tp_jobs == NULL) {
-        goto cleanup_threads;
-    }
-    tpool->tp_lock = lock_create();
-    if (tpool->tp_lock == NULL) {
-        goto cleanup_joblist;
-    }
-    tpool->tp_cv_job_queue = cv_create();
-    if (tpool->tp_cv_job_queue == NULL) {
-        goto cleanup_lock;
-    }
-    tpool->tp_shutdown_sem = semaphore_create(0);
-    if (tpool->tp_shutdown_sem == NULL) {
-        goto cleanup_cv;
-    }
+    int result;
+    struct threadpool *tpool = NULL;
+
+    TRYNULL(result, DBENOMEM, tpool, malloc(sizeof(struct threadpool)), done);
+    TRYNULL(result, DBENOMEM, tpool->tp_threads,
+            malloc(nthreads * sizeof(pthread_t)), cleanup_tpool);
+    TRYNULL(result, DBENOMEM, tpool->tp_jobs, joblist_create(), cleanup_threads);
+    TRYNULL(result, DBENOMEM, tpool->tp_lock, lock_create(), cleanup_joblist);
+    TRYNULL(result, DBENOMEM, tpool->tp_cv_job_queue, cv_create(), cleanup_lock);
+    TRYNULL(result, DBENOMEM, tpool->tp_shutdown_sem, semaphore_create(0), cleanup_cv);
+
     tpool->tp_shutdown = false;
     tpool->tp_nthreads = nthreads;
 
     // start and detach all the threads
-    int result;
     for (unsigned i = 0; i < nthreads; i++) {
         // TODO: right now, we will crash if we can't spawn and detach
         // the threads. In the future, we should handle this more elegantly
@@ -200,10 +188,8 @@ threadpool_add_job(struct threadpool *tpool, struct job *job)
 
     // the threadpool maintains its own copy of the job
     int result;
-    struct job *jobinternal = job_copy(job);
-    if (job == NULL) {
-        goto done;
-    }
+    struct job *jobinternal = NULL;
+    TRYNULL(result, DBENOMEM, jobinternal, job_copy(job), done);
 
     // Add a job to the queue and signal a thread to wake up to handle it
     lock_acquire(tpool->tp_lock);
