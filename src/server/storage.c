@@ -16,6 +16,7 @@
 #include "../common/include/synch.h"
 #include "../common/include/search.h"
 #include "../common/include/dberror.h"
+#include "../common/include/try.h"
 
 #define METADATA_FILENAME "metadata"
 
@@ -31,20 +32,12 @@ struct storage *
 storage_init(char *dbdir)
 {
     int result;
-    struct storage *storage = malloc(sizeof(struct storage));
-    if (storage == NULL) {
-        result = DBENOMEM;
-        goto done;
-    }
+    struct storage *storage;
+
+    TRYNULL(result, DBENOMEM, storage, malloc(sizeof(struct storage)), done);
     strcpy(storage->st_dbdir, dbdir);
-    storage->st_lock = lock_create();
-    if (storage->st_lock == NULL) {
-        goto cleanup_malloc;
-    }
-    storage->st_open_cols = columnarray_create();
-    if (storage->st_open_cols == NULL) {
-        goto cleanup_lock;
-    }
+    TRYNULL(result, DBENOMEM, storage->st_lock, lock_create(), cleanup_malloc);
+    TRYNULL(result, DBENOMEM, storage->st_open_cols, columnarray_create(), cleanup_lock);
     // create the directory if it doesn't already exist
     // it will return ENOENT if it already exists
     result = mkdir(dbdir, S_IRWXU);
@@ -53,10 +46,9 @@ storage_init(char *dbdir)
     }
     char buf[128];
     sprintf(buf, "%s/%s", dbdir, METADATA_FILENAME);
-    storage->st_file = file_open(buf);
-    if (storage->st_file == NULL) {
-        goto cleanup_mkdir;
-    }
+    TRYNULL(result, DBEIONOFILE, storage->st_file, file_open(buf), cleanup_mkdir);
+
+    result = 0;
     goto done;
 
   cleanup_mkdir:
@@ -176,15 +168,12 @@ storage_synch_column(struct storage *storage,
 
     int result;
     struct column_on_disk colbuf[COLUMNS_PER_PAGE];
-    result = file_read(storage->st_file, page, colbuf);
-    if (result) {
-        goto done;
-    }
+    TRY(result, file_read(storage->st_file, page, colbuf), done);
     colbuf[index] = *coldisk;
-    result = file_write(storage->st_file, page, colbuf);
-    if (result) {
-        goto done;
-    }
+    TRY(result, file_write(storage->st_file, page, colbuf), done);
+
+    result = 0;
+    goto done;
   done:
     return result;
 }
@@ -238,11 +227,8 @@ storage_add_column(struct storage *storage, char *colname,
     // create a file to store the column data
     char filenamebuf[56];
     sprintf(filenamebuf, "%s/%s.column", storage->st_dbdir, colname);
-    struct file *colfile = file_open(filenamebuf);
-    if (colfile == NULL) {
-        result = DBEFILE;
-        goto done;
-    }
+    struct file *colfile;
+    TRYNULL(result, DBEFILE, colfile, file_open(filenamebuf), done);
     file_close(colfile);
     sprintf(newcol.cd_base_file, "%s.column", colname);
 
@@ -256,11 +242,8 @@ storage_add_column(struct storage *storage, char *colname,
             sprintf(indexnamebuf, "%s/%s.sorted", storage->st_dbdir, colname);
             sprintf(newcol.cd_index_file, "%s.sorted", colname);
         }
-        struct file *colindexfile = file_open(indexnamebuf);
-        if (colindexfile == NULL) {
-            result = DBEFILE;
-            goto cleanup_file;
-        }
+        struct file *colindexfile;
+        TRYNULL(result, DBEFILE, colindexfile, file_open(indexnamebuf), cleanup_file);
         if (stype == STORAGE_BTREE) {
             // Create a page for the root node.
             // The first time we load, it's going to be a
@@ -293,17 +276,11 @@ storage_add_column(struct storage *storage, char *colname,
     // if we couldn't find a free slot earlier, we need to extend
     // the storage metadata file
     if (!freefound) {
-        result = file_alloc_page(storage->st_file, &colpage);
-        if (result) {
-            goto cleanup_file;
-        }
+        TRY(result, file_alloc_page(storage->st_file, &colpage), cleanup_file);
         colindex = 0;
     }
     // finally write the new column to disk
-    result = storage_synch_column(storage, &newcol, colpage, colindex);
-    if (result) {
-        goto cleanup_page;
-    }
+    TRY(result, storage_synch_column(storage, &newcol, colpage, colindex), cleanup_page);
 
     // success
     result = 0;
@@ -357,20 +334,14 @@ column_open(struct storage *storage, char *colname)
     assert(colbuf[colindex].cd_magic == COLUMN_TAKEN);
 
     // allocate space for the in-memory representation of the column
-    col = malloc(sizeof(struct column));
-    if (col == NULL) {
-        goto done;
-    }
+    TRYNULL(result, DBENOMEM, col, malloc(sizeof(struct column)), done);
     memcpy(&col->col_disk, &colbuf[colindex], sizeof(struct column_on_disk));
 
     // open the base file for the column
     char filenamebuf[56];
     sprintf(filenamebuf, "%s/%s", storage->st_dbdir,
             col->col_disk.cd_base_file);
-    col->col_base_file = file_open(filenamebuf);
-    if (col->col_base_file == NULL) {
-        goto cleanup_malloc;
-    }
+    TRYNULL(result, DBEFILE, col->col_base_file, file_open(filenamebuf), cleanup_malloc);
 
     // open the index file for the column if it exists
     // only columns that have btree and sorted storage
@@ -379,17 +350,11 @@ column_open(struct storage *storage, char *colname)
          || col->col_disk.cd_stype == STORAGE_SORTED)) {
         sprintf(filenamebuf, "%s/%s", storage->st_dbdir,
                 col->col_disk.cd_index_file);
-        col->col_index_file = file_open(filenamebuf);
-        if (col->col_index_file == NULL) {
-            goto cleanup_file;
-        }
+        TRYNULL(result, DBEFILE, col->col_index_file, file_open(filenamebuf), cleanup_file);
     }
 
     // allocate the lock to protect the column
-    col->col_rwlock = rwlock_create();
-    if (col->col_rwlock == NULL) {
-        goto cleanup_file;
-    }
+    TRYNULL(result, DBENOMEM, col->col_rwlock, rwlock_create(), cleanup_file);
     col->col_page = colpage;
     col->col_index = colindex;
     col->col_opencount = 1;
@@ -397,10 +362,8 @@ column_open(struct storage *storage, char *colname)
     col->col_dirty = false;
 
     // finally, add this column to the array of open columns
-    result = columnarray_add(storage->st_open_cols, col, NULL);
-    if (result) {
-        goto cleanup_lock;
-    }
+    TRY(result, columnarray_add(storage->st_open_cols, col, NULL), cleanup_lock);
+    result = 0;
     goto done;
 
   cleanup_lock:
@@ -423,6 +386,7 @@ void
 column_close(struct column *col)
 {
     assert(col != NULL);
+    int result;
     // to prevent an open and close happening at the same time for this
     // column, we grab the lock on storage first
     // to avoid deadlock, we grab the storage lock first
@@ -448,11 +412,10 @@ column_close(struct column *col)
 
     // synch any changes in the column if it is dirty
     if (col->col_dirty) {
-        int result = storage_synch_column(storage, &col->col_disk,
-                                          col->col_page, col->col_index);
-        if (result) {
-            goto done;
-        }
+        TRY(result,
+            storage_synch_column(storage, &col->col_disk,
+                                 col->col_page, col->col_index),
+            done);
     }
 
     // remove the column from the list of open columns
@@ -505,10 +468,8 @@ btree_select_range(struct column *col,
     unsigned curix = ixleft;
     while (1) {
         assert(curpage != BTREE_PAGE_NULL);
-        result = file_read(col->col_index_file, curpage, &nodebuf);
-        if (result) {
-            goto done;
-        }
+        TRY(result, file_read(col->col_index_file, curpage, &nodebuf), done);
+
         assert(nodebuf.bt_header.bth_type == BTREE_NODE_LEAF);
         assert(nodebuf.bt_header.bth_page == curpage);
 
@@ -549,10 +510,7 @@ btree_search(struct column *col, int val,
     page_t curpage = col->col_disk.cd_btree_root;
     while (targetpage == BTREE_PAGE_NULL) {
         assert(curpage != BTREE_PAGE_NULL);
-        result = file_read(col->col_index_file, curpage, &nodebuf);
-        if (result) {
-            goto done;
-        }
+        TRY(result, file_read(col->col_index_file, curpage, &nodebuf), done);
         unsigned ix = binary_search(&target, &nodebuf.bt_entries,
                                     nodebuf.bt_header.bth_nentries,
                                     sizeof(struct btree_entry),
@@ -839,38 +797,23 @@ column_select_btree(struct column *col, struct op *op,
         goto done;
     case OP_SELECT_RANGE:
     case OP_SELECT_RANGE_ASSIGN:
-        result = btree_search(col, op->op_select.op_sel_low,
-                              &pleft, &ixleft);
-        if (result) {
-            goto done;
-        }
-        result = btree_search(col, op->op_select.op_sel_high + 1,
-                              &pright, &ixright);
-        if (result) {
-            goto done;
-        }
+        TRY(result, btree_search(col, op->op_select.op_sel_low,
+                                 &pleft, &ixleft), done);
+        TRY(result, btree_search(col, op->op_select.op_sel_high + 1,
+                                 &pright, &ixright), done);
         break;
     case OP_SELECT_VALUE:
     case OP_SELECT_VALUE_ASSIGN:
-        result = btree_search(col, op->op_select.op_sel_value,
-                              &pleft, &ixleft);
-        if (result) {
-            goto done;
-        }
-        result = btree_search(col, op->op_select.op_sel_value + 1,
-                              &pright, &ixright);
-        if (result) {
-            goto done;
-        }
+        TRY(result, btree_search(col, op->op_select.op_sel_value,
+                                 &pleft, &ixleft), done);
+        TRY(result, btree_search(col, op->op_select.op_sel_value + 1,
+                                 &pright, &ixright), done);
         break;
     default:
         assert(0);
         break;
     }
-    result = btree_select_range(col, pleft, ixleft, pright, ixright, cids);
-    if (result) {
-        goto done;
-    }
+    TRY(result, btree_select_range(col, pleft, ixleft, pright, ixright, cids), done);
 
     // success
     result = 0;
@@ -909,10 +852,7 @@ column_select_sorted_range(struct column *col, uint64_t left, uint64_t right,
         page_t curpage =
                 FILE_FIRST_PAGE + (curtuple / COLENTRY_SORTED_PER_PAGE);
         if (curpage != bufpage) {
-            result = file_read(col->col_index_file, curpage, colentrybuf);
-            if (result) {
-                goto done;
-            }
+            TRY(result, file_read(col->col_index_file, curpage, colentrybuf), done);
             bufpage = curpage;
         }
         // mark the bit for this id
@@ -954,10 +894,7 @@ column_search_sorted(struct column *col, int val, uint64_t *retindex)
     page_t pr = plast;
     while (pl < pr) {
         page_t pm = pl + (pr - pl) / 2;
-        result = file_read(col->col_index_file, pm, colentrybuf);
-        if (result) {
-            goto done;
-        }
+        TRY(result, file_read(col->col_index_file, pm, colentrybuf), done);
         pbuf = pm;
 
         // if we're on the last page, we need to make sure we don't
@@ -988,10 +925,7 @@ column_search_sorted(struct column *col, int val, uint64_t *retindex)
     // our buffer is equal to pl. If it's not, load the page into
     // the buffer.
     if (pl != pbuf) {
-        result = file_read(col->col_index_file, pl, colentrybuf);
-        if (result) {
-            goto done;
-        }
+        TRY(result, file_read(col->col_index_file, pl, colentrybuf), done);
     }
     // Now attempt to find our tuple on this page. Since pl != plast,
     // our lower bound MUST be in this page.
@@ -1036,34 +970,19 @@ column_select_sorted(struct column *col, struct op *op,
     case OP_SELECT_RANGE_ASSIGN:
         // we search for the lower bound of high + 1 so that our
         // range is [low,high] inclusive
-        result = column_search_sorted(col, op->op_select.op_sel_low, &left);
-        if (result) {
-            goto done;
-        }
-        result = column_search_sorted(col, op->op_select.op_sel_high + 1, &right);
-        if (result) {
-            goto done;
-        }
+        TRY(result, column_search_sorted(col, op->op_select.op_sel_low, &left), done);
+        TRY(result, column_search_sorted(col, op->op_select.op_sel_high + 1, &right), done);
         break;
     case OP_SELECT_VALUE:
     case OP_SELECT_VALUE_ASSIGN:
-        result = column_search_sorted(col, op->op_select.op_sel_value, &left);
-        if (result) {
-            goto done;
-        }
-        result = column_search_sorted(col, op->op_select.op_sel_value + 1, &right);
-        if (result) {
-            goto done;
-        }
+        TRY(result, column_search_sorted(col, op->op_select.op_sel_value, &left), done);
+        TRY(result, column_search_sorted(col, op->op_select.op_sel_value + 1, &right), done);
         break;
     default:
         assert(0);
         break;
     }
-    result = column_select_sorted_range(col, left, right, cids);
-    if (result) {
-        goto done;
-    }
+    TRY(result, column_select_sorted_range(col, left, right, cids), done);
 
     // success
     result = 0;
@@ -1113,10 +1032,7 @@ column_select_unsorted(struct column *col, struct op *op,
     uint64_t ntuples = col->col_disk.cd_ntuples;
     page_t page = FILE_FIRST_PAGE;
     while (scanned < ntuples) {
-        result = file_read(col->col_base_file, page, colentrybuf);
-        if (result) {
-            goto done;
-        }
+        TRY(result, file_read(col->col_base_file, page, colentrybuf), done);
         uint64_t toscan = MIN(ntuples - scanned, COLENTRY_UNSORTED_PER_PAGE);
         for (unsigned i = 0; i < toscan; i++, scanned++) {
             struct column_entry_unsorted entry = colentrybuf[i];
@@ -1141,14 +1057,10 @@ column_select(struct column *col, struct op *op)
     rwlock_acquire_read(col->col_rwlock);
 
     int result;
-    struct column_ids *cids = malloc(sizeof(struct column_ids));
-    if (cids == NULL) {
-        goto done;
-    }
-    cids->cid_bitmap = bitmap_create(col->col_disk.cd_ntuples);
-    if (cids->cid_bitmap == NULL) {
-        goto cleanup_malloc;
-    }
+    struct column_ids *cids;
+    TRYNULL(result, DBENOMEM, cids, malloc(sizeof(struct column_ids)), done);
+    TRYNULL(result, DBENOMEM,
+            cids->cid_bitmap, bitmap_create(col->col_disk.cd_ntuples), cleanup_malloc);
     // select based on the storage type of the column
     switch (col->col_disk.cd_stype) {
     case STORAGE_UNSORTED:
@@ -1168,6 +1080,7 @@ column_select(struct column *col, struct op *op)
         goto cleanup_bitmap;
     }
     // success
+    result = 0;
     goto done;
 
   cleanup_bitmap:
@@ -1208,18 +1121,12 @@ column_fetch_base_data(struct column *col, struct column_ids *ids,
         // if the requested page is not the current page in the buffer,
         // read in that page and update the curpage
         if (requestedpage != curpage) {
-            result = file_read(col->col_base_file, requestedpage, colentrybuf);
-            if (result) {
-                goto done;
-            }
+            TRY(result, file_read(col->col_base_file, requestedpage, colentrybuf), done);
             curpage = requestedpage;
         }
         unsigned requestedindex = i % COLENTRY_UNSORTED_PER_PAGE;
         int val = colentrybuf[requestedindex].ce_val;
-        result = valarray_add(vals, (void *) val, NULL);
-        if (result) {
-            goto done;
-        }
+        TRY(result, valarray_add(vals, (void *) val, NULL), done);
     }
     // success
     result = 0;
@@ -1237,12 +1144,11 @@ column_fetch(struct column *col, struct column_ids *ids)
     uint64_t ntuples = col->col_disk.cd_ntuples;
     assert(ntuples == bitmap_nbits(ids->cid_bitmap));
 
-    struct column_vals *cvals = NULL;
-    struct valarray *vals = valarray_create();
-    if (vals == NULL) {
-        goto done;
-    }
     int result;
+    struct column_vals *cvals = NULL;
+    struct valarray *vals;
+    TRYNULL(result, DBENOMEM, vals, valarray_create(), done);
+
     switch (col->col_disk.cd_stype) {
     case STORAGE_UNSORTED:
     case STORAGE_SORTED:
@@ -1260,10 +1166,7 @@ column_fetch(struct column *col, struct column_ids *ids)
 
     // memcpy the results from the resizable array into the pointer in this
     // struct column_vals
-    cvals = malloc(sizeof(struct column_vals));
-    if (cvals == NULL) {
-        goto cleanup_vals;
-    }
+    TRYNULL(result, DBENOMEM, cvals, malloc(sizeof(struct column_vals)), cleanup_vals);
     cvals->cval_len = valarray_num(vals);
     cvals->cval_vals = malloc(sizeof(int) * cvals->cval_len);
     if (cvals->cval_vals == NULL) {
@@ -1307,10 +1210,7 @@ column_load_unsorted(struct file *f, int *vals, uint64_t num)
         bzero(intbuf, PAGESIZE);
         memcpy(intbuf, vals + curtuple, bytes_tocopy);
         page_t page;
-        result = file_alloc_page(f, &page);
-        if (result) {
-            goto done;
-        }
+        TRY(result, file_alloc_page(f, &page), done);
         result = file_write(f, page, intbuf);
         if (result) {
             file_free_page(f, page);
@@ -1331,12 +1231,9 @@ column_load_index_sorted(struct file *f, int *vals, uint64_t num)
 
     int result;
     // create the entries in memory and sort them
-    struct column_entry_sorted *entries =
-            malloc(num * sizeof(struct column_entry_sorted));
-    if (entries == NULL) {
-        result = DBENOMEM;
-        goto done;
-    }
+    struct column_entry_sorted *entries;
+    TRYNULL(result, DBENOMEM, entries,
+            malloc(num * sizeof(struct column_entry_sorted)), done);
     for (uint64_t i = 0; i < num; i++) {
         entries[i].ce_val = vals[i];
         entries[i].ce_index = i;
@@ -1355,10 +1252,7 @@ column_load_index_sorted(struct file *f, int *vals, uint64_t num)
         bzero(colentrybuf, PAGESIZE);
         memcpy(colentrybuf, entries + curtuple, bytes_tocopy);
         page_t page;
-        result = file_alloc_page(f, &page);
-        if (result) {
-            goto cleanup_malloc;
-        }
+        TRY(result, file_alloc_page(f, &page), cleanup_malloc);
         result = file_write(f, page, colentrybuf);
         if (result) {
             file_free_page(f, page);
@@ -1452,16 +1346,10 @@ column_insert_sorted(struct column *col, int val)
         // we are inserting at the end
         if (!file_page_isalloc(col->col_index_file, page)) {
             assert(ix == 0);
-            result = file_alloc_page(col->col_index_file, &newpage);
-            if (result) {
-                goto cleanup_page;
-            }
+            TRY(result, file_alloc_page(col->col_index_file, &newpage), cleanup_page);
             assert(page == newpage);
         }
-        result = file_read(col->col_index_file, page, colbuf);
-        if (result) {
-            goto done;
-        }
+        TRY(result, file_read(col->col_index_file, page, colbuf), done);
         uint64_t ntuples_before =
                 (page - FILE_FIRST_PAGE) * COLENTRY_SORTED_PER_PAGE;
         unsigned ntuples_this = MIN(COLENTRY_SORTED_PER_PAGE,
@@ -1514,23 +1402,14 @@ column_insert_unsorted(struct column *col, int val)
     page_t page = FILE_FIRST_PAGE + index / COLENTRY_UNSORTED_PER_PAGE;
     page_t newpage;
     if (!file_page_isalloc(col->col_base_file, page)) {
-        result = file_alloc_page(col->col_base_file, &newpage);
-        if (result) {
-            goto done;
-        }
+        TRY(result, file_alloc_page(col->col_base_file, &newpage), done);
         assert(page == newpage);
     }
     struct column_entry_unsorted colbuf[COLENTRY_UNSORTED_PER_PAGE];
-    result = file_read(col->col_base_file, page, colbuf);
-    if (result) {
-        goto cleanup_page;
-    }
+    TRY(result, file_read(col->col_base_file, page, colbuf), cleanup_page);
     unsigned ix = index % COLENTRY_UNSORTED_PER_PAGE;
     colbuf[ix].ce_val = val;
-    result = file_write(col->col_base_file, page, colbuf);
-    if (result) {
-        goto cleanup_page;
-    }
+    TRY(result, file_write(col->col_base_file, page, colbuf), cleanup_page);
 
     // success
     result = 0;
@@ -1550,10 +1429,7 @@ column_insert(struct column *col, int val)
 
     // we always insert into the unsorted projection as well
     // because we use this for fetching
-    result = column_insert_unsorted(col, val);
-    if (result) {
-        goto done;
-    }
+    TRY(result, column_insert_unsorted(col, val), done);
     switch (col->col_disk.cd_stype) {
     case STORAGE_BTREE:
         result = column_insert_btree(col, val);
@@ -1568,6 +1444,9 @@ column_insert(struct column *col, int val)
     default:
         assert(0);
         break;
+    }
+    if (result) {
+        goto done;
     }
 
     // success

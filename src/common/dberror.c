@@ -1,7 +1,10 @@
 #include <assert.h>
 #include <stddef.h>
 #include <stdio.h>
+#include <stdbool.h>
+#include <errno.h>
 #include "include/dberror.h"
+#include <string.h>
 
 const char *
 dberror_string(enum dberror result)
@@ -31,6 +34,7 @@ dberror_string(enum dberror result)
     case DBECSV: return "csv error";
     case DBECOLSELECT: return "column select error";
     case DBECOLFETCH: return "column fetch error";
+    case DBECLIENTTERM: return "client terminated connection";
     default:
         assert(0);
         return NULL;
@@ -43,6 +47,43 @@ dberror_log(char *msg,
             int line,
             const char *func)
 {
-    fprintf(stderr, "[ERROR: %s] %s:%d:%s\n",
-            msg, file, line, func);
+    char *errnomsg = strerror(errno);
+    fprintf(stderr, "[ERROR: %s, errno: %s] %s:%d:%s\n",
+            msg, errnomsg, file, line, func);
+}
+
+bool
+dberror_server_is_fatal(enum dberror result)
+{
+    switch (result) {
+    case DBECLIENTTERM:
+    case DBESIGACTION:
+    case DBELISTEN:
+    case DBEBIND:
+    case DBEACCEPT:
+    case DBESETSOCKOPT:
+    case DBEGETADDRINFO:
+    case DBESOCKET:
+    case DBEIOCHECKERRNO:
+        return true;
+    default:
+        return false;
+    }
+}
+
+bool
+dberror_client_is_fatal(enum dberror result)
+{
+    switch (result) {
+    case DBEIOCHECKERRNO:
+    case DBESOCKET:
+    case DBESERVERTERM:
+    case DBEGETADDRINFO:
+    case DBECONNECT:
+    case DBESELECT:
+    case DBESIGACTION:
+        return true;
+    default:
+        return false;
+    }
 }

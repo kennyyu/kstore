@@ -20,6 +20,7 @@
 #include "src/common/include/csv.h"
 #include "src/common/include/search.h"
 #include "src/common/include/dberror.h"
+#include "src/common/include/try.h"
 #include "src/server/include/storage.h"
 
 #define PORT 5000
@@ -78,18 +79,11 @@ static
 struct server_jobctx *
 server_jobctx_create(int fd, unsigned jobid, struct storage *storage)
 {
-    struct server_jobctx *jobctx = malloc(sizeof(struct server_jobctx));
-    if (jobctx == NULL) {
-        goto done;
-    }
-    jobctx->sj_env = vartuplearray_create();
-    if (jobctx->sj_env == NULL) {
-        goto cleanup_malloc;
-    }
-    jobctx->sj_files = filetuplearray_create();
-    if (jobctx->sj_files == NULL) {
-        goto cleanup_vartuple;
-    }
+    int result;
+    struct server_jobctx *jobctx;
+    TRYNULL(result, DBENOMEM, jobctx, malloc(sizeof(struct server_jobctx)), done);
+    TRYNULL(result, DBENOMEM, jobctx->sj_env, vartuplearray_create(), cleanup_malloc);
+    TRYNULL(result, DBENOMEM, jobctx->sj_files, filetuplearray_create(), cleanup_vartuple);
     jobctx->sj_fd = fd;
     jobctx->sj_jobid = jobid;
     jobctx->sj_storage = storage;
@@ -160,20 +154,16 @@ server_eval_load(struct server_jobctx *jobctx, struct op *op)
     int result;
 
     // parse the csv
-    struct csv_resultarray *results = csv_parse(csvfd);
-    if (results == NULL) {
-        result = DBECSV;
-        goto done;
-    }
+    struct csv_resultarray *results = NULL;
+    TRYNULL(result, DBECSV, results, csv_parse(csvfd), done);
 
     // for each column, load the data into that column
     for (unsigned i = 0; i < csv_resultarray_num(results); i++) {
         struct csv_result *csvheader = csv_resultarray_get(results, i);
-        struct column *col =
-                column_open(jobctx->sj_storage, csvheader->csv_colname);
-        if (col == NULL) {
-            goto cleanup_csv;
-        }
+        struct column *col;
+        TRYNULL(result, DBECOLOPEN, col,
+                column_open(jobctx->sj_storage, csvheader->csv_colname),
+                cleanup_csv);
         result = column_load(col, (int *) csvheader->csv_vals->arr.v,
                              intarray_num(csvheader->csv_vals));
         if (result) {
@@ -232,17 +222,10 @@ server_add_var(struct vartuplearray *env, char *varname,
     if (vtuple == NULL) {
         // we couldn't find the variable in the environment, so we
         // need to create it
-        vtuple = malloc(sizeof(struct vartuple));
-        if (vtuple == NULL) {
-            result = DBENOMEM;
-            goto done;
-        }
+        TRYNULL(result, DBENOMEM, vtuple, malloc(sizeof(struct vartuple)), done);
         should_cleanup_vtuple_on_err = true;
         strcpy(vtuple->vt_var, varname);
-        result = vartuplearray_add(env, vtuple, NULL);
-        if (result) {
-            goto cleanup_vartuple;
-        }
+        TRY(result, vartuplearray_add(env, vtuple, NULL), cleanup_vartuple);
     } else {
         // need to destroy the old assignment before reusing
         switch (vtuple->vt_type) {
@@ -292,17 +275,12 @@ server_eval_select(struct server_jobctx *jobctx, struct op *op)
     assert(op->op_type >= OP_SELECT_ALL_ASSIGN
            && op->op_type <= OP_SELECT_RANGE);
     int result;
-    struct column *col =
-            column_open(jobctx->sj_storage, op->op_select.op_sel_col);
-    if (col == NULL) {
-        result = DBECOLOPEN;
-        goto done;
-    }
-    struct column_ids *ids = column_select(col, op);
-    if (ids == NULL) {
-        result = DBECOLSELECT;
-        goto cleanup_col;
-    }
+    struct column *col;
+    TRYNULL(result, DBECOLOPEN, col,
+            column_open(jobctx->sj_storage, op->op_select.op_sel_col),
+            done);
+    struct column_ids *ids;
+    TRYNULL(result, DBECOLSELECT, ids, column_select(col, op), cleanup_col);
 
     // If we have an assignment,
     // find the variable in the vartuple array if it already exists
@@ -320,12 +298,8 @@ server_eval_select(struct server_jobctx *jobctx, struct op *op)
         assert(0);
         break;
     }
-    result = server_add_var(jobctx->sj_env, op->op_select.op_sel_var,
-                            VAR_IDS, ids, NULL);
-    if (result) {
-        goto cleanup_col;
-    }
-
+    TRY(result, server_add_var(jobctx->sj_env, op->op_select.op_sel_var,
+                               VAR_IDS, ids, NULL), cleanup_col);
     // success
     result = 0;
     goto cleanup_col;
@@ -344,43 +318,35 @@ server_eval_fetch(struct server_jobctx *jobctx, struct op *op)
     assert(op != NULL);
     assert(op->op_type == OP_FETCH || op->op_type == OP_FETCH_ASSIGN);
     int result;
-    struct column *col =
-            column_open(jobctx->sj_storage, op->op_fetch.op_fetch_col);
-    if (col == NULL) {
-        result = DBECOLOPEN;
-        goto done;
-    }
+    struct column *col;
+    TRYNULL(result, DBECOLOPEN, col,
+            column_open(jobctx->sj_storage, op->op_fetch.op_fetch_col),
+            done);
     // find the variable representing the positions
-    struct vartuple *v =
-            server_eval_get_var(jobctx->sj_env, op->op_fetch.op_fetch_pos);
-    if (v == NULL) {
-        result = DBENOVAR; // couldn't find var
+    struct vartuple *v;
+    TRYNULL(result, DBENOVAR, v,
+            server_eval_get_var(jobctx->sj_env, op->op_fetch.op_fetch_pos),
+            cleanup_col);
+    if (v->vt_type != VAR_IDS) {
+        result = DBEVARTYPE;
+        DBLOG(result);
         goto cleanup_col;
     }
-    assert(v->vt_type == VAR_IDS);
     // now that we have the ids, let's fetch the values for those ids
-    struct column_vals *vals = column_fetch(col, v->vt_column_ids);
-    if (vals == NULL) {
-        result = DBECOLFETCH;
-        goto cleanup_col;
-    }
+    struct column_vals *vals;
+    TRYNULL(result, DBECOLFETCH, vals,
+            column_fetch(col, v->vt_column_ids), cleanup_col);
 
     switch (op->op_type) {
     case OP_FETCH:
         // now write the results back to the client
         // sort the values before returning
         qsort(vals->cval_vals, vals->cval_len, sizeof(int), int_compare);
-        result = rpc_write_fetch_result(jobctx->sj_fd, vals);
-        if (result) {
-            goto cleanup_vals;
-        }
+        TRY(result, rpc_write_fetch_result(jobctx->sj_fd, vals), cleanup_vals);
         break;
     case OP_FETCH_ASSIGN:
-        result = server_add_var(jobctx->sj_env, op->op_fetch.op_fetch_var,
-                                VAR_VALS, NULL, vals);
-        if (result) {
-            goto cleanup_vals;
-        }
+        TRY(result, server_add_var(jobctx->sj_env, op->op_fetch.op_fetch_var,
+                                   VAR_VALS, NULL, vals), cleanup_vals);
         result = 0;
         goto cleanup_col;  // don't destroy results
     default:
@@ -407,16 +373,11 @@ server_eval_insert(struct server_jobctx *jobctx, struct op *op)
     assert(op->op_type == OP_INSERT);
 
     int result;
-    struct column *col =
-            column_open(jobctx->sj_storage, op->op_insert.op_insert_col);
-    if (col == NULL) {
-        result = DBECOLOPEN;
-        goto done;
-    }
-    result = column_insert(col, op->op_insert.op_insert_val);
-    if (result) {
-        goto done;
-    }
+    struct column *col;
+    TRYNULL(result, DBECOLOPEN, col,
+            column_open(jobctx->sj_storage, op->op_insert.op_insert_col),
+            done);
+    TRY(result, column_insert(col, op->op_insert.op_insert_val), done);
 
     // success
     result = 0;
@@ -434,11 +395,12 @@ server_eval_create(struct server_jobctx *jobctx, struct op *op)
     assert(jobctx != NULL);
     assert(op != NULL);
     assert(op->op_type == OP_CREATE);
-    int result = storage_add_column(jobctx->sj_storage, op->op_create.op_create_col,
-                                    op->op_create.op_create_stype);
-    if (result) {
-        fprintf(stderr, "storage_add_column failed\n");
-    }
+    int result;
+    TRY(result, storage_add_column(jobctx->sj_storage, op->op_create.op_create_col,
+                                   op->op_create.op_create_stype), done);
+    result = 0;
+    goto done;
+  done:
     return result;
 }
 
@@ -454,11 +416,8 @@ server_eval_tuple(struct server_jobctx *jobctx, struct op *op)
     assert(op->op_type == OP_TUPLE);
 
     int result;
-    struct column_valsarray *tuples = column_valsarray_create();
-    if (tuples == NULL) {
-        result = DBENOMEM;
-        goto done;
-    }
+    struct column_valsarray *tuples;
+    TRYNULL(result, DBENOMEM, tuples, column_valsarray_create(), done);
     const char *delimiters = ",";
     char *pch;
     char *saveptr;
@@ -466,24 +425,20 @@ server_eval_tuple(struct server_jobctx *jobctx, struct op *op)
     // Find the variable in the environment
     pch = strtok_r((char *) op->op_tuple.op_tuple_vars, delimiters, &saveptr);
     while (pch != NULL) {
-        struct vartuple *v = server_eval_get_var(jobctx->sj_env, pch);
-        if (v == NULL) {
-            result = DBENOVAR;
+        struct vartuple *v;
+        TRYNULL(result, DBENOVAR, v,
+                server_eval_get_var(jobctx->sj_env, pch), cleanup_valsarray);
+        if (v->vt_type != VAR_VALS) {
+            result = DBEVARTYPE;
+            DBLOG(result);
             goto cleanup_valsarray;
         }
-        assert(v->vt_type == VAR_VALS);
-        result = column_valsarray_add(tuples, v->vt_column_vals, NULL);
-        if (result) {
-            goto cleanup_valsarray;
-        }
+        TRY(result, column_valsarray_add(tuples, v->vt_column_vals, NULL), cleanup_valsarray);
         pch = strtok_r(NULL, delimiters, &saveptr);
     }
-    result = rpc_write_tuple_result(jobctx->sj_fd,
+    TRY(result, rpc_write_tuple_result(jobctx->sj_fd,
                                     (struct column_vals **) tuples->arr.v,
-                                    tuples->arr.num);
-    if (result) {
-        goto cleanup_valsarray;
-    }
+                                    tuples->arr.num), cleanup_valsarray);
 
     result = 0;
     goto cleanup_valsarray;
@@ -542,40 +497,27 @@ server_routine(void *arg, unsigned threadnum)
         struct op *op;
         struct rpc_header msg;
         struct rpc_header loadmsg;
-        result = rpc_read_header(clientfd, &msg);
-        if (result) {
-            goto done;
-        }
+        TRY(result, rpc_read_header(clientfd, &msg), recover);
         switch (msg.rpc_type) {
         case RPC_TERMINATE:
             printf("[Thread %u] received TERMINATE\n", threadnum);
             assert(rpc_write_terminate(clientfd) == 0);
-            goto done;
+            result = DBECLIENTTERM;
+            goto recover;
         case RPC_QUERY:
             // handle RPC_FILE here as well
-            result = rpc_read_query(clientfd, &msg, &op);
-            if (result) {
-                goto done;
-            }
+            TRY(result, rpc_read_query(clientfd, &msg, &op), recover);
             if (op->op_type == OP_LOAD) {
                 int copyfd;
                 char filenamebuf[128];
                 sprintf(filenamebuf, "%s/jobid-%d.loadid-%d.tmp",
                         sarg->sj_storage->st_dbdir, jobid, loadid);
                 loadid++;
-                result = rpc_read_header(clientfd, &loadmsg);
-                if (result) {
-                    goto cleanup_op;
-                }
+                TRY(result, rpc_read_header(clientfd, &loadmsg), cleanup_op);
                 assert(loadmsg.rpc_type = RPC_FILE);
-                result = rpc_read_file(clientfd, &loadmsg, filenamebuf, &copyfd);
-                if (result) {
-                    goto cleanup_op;
-                }
-                struct filetuple *ftuple = malloc(sizeof(struct filetuple));
-                if (ftuple == NULL) {
-                    goto cleanup_op;
-                }
+                TRY(result, rpc_read_file(clientfd, &loadmsg, filenamebuf, &copyfd), cleanup_op);
+                struct filetuple *ftuple;
+                TRYNULL(result, DBENOMEM, ftuple, malloc(sizeof(struct filetuple)), cleanup_op);
                 // TODO: file names are larger than ftuple char buf
                 strcpy(ftuple->ft_name, op->op_load.op_load_file);
                 ftuple->ft_fd = copyfd;
@@ -585,10 +527,7 @@ server_routine(void *arg, unsigned threadnum)
                     goto cleanup_op;
                 }
             }
-            result = server_eval(sarg, op);
-            if (result) {
-                goto cleanup_op;
-            }
+            TRY(result, server_eval(sarg, op), cleanup_op);
             break;
         default:
             assert(0);
@@ -598,12 +537,18 @@ server_routine(void *arg, unsigned threadnum)
 
       cleanup_op:
         free(op);
-        goto done;
+      recover:
+        if (result != DBECLIENTTERM) {
+            (void) rpc_write_error(clientfd, (char *) dberror_string(result));
+        }
+        if (dberror_server_is_fatal(result)) {
+            goto done;
+        }
+        continue;
     }
     // TODO send result/error
   done:
-    if (result) {
-        (void) rpc_write_error(clientfd, "server error");
+    if (result && result != DBECLIENTTERM) {
         (void) rpc_write_terminate(clientfd);
     }
     server_jobctx_destroy(sarg);
@@ -679,8 +624,8 @@ main(int argc, char **argv)
     sprintf(portbuf, "%d", server_options.sopt_port);
     result = getaddrinfo(NULL, portbuf, &hints, &servinfo);
     if (result != 0) {
-        perror("getaddrinfo");
         result = DBEGETADDRINFO;
+        DBLOG(result);
         goto done;
     }
 
@@ -688,24 +633,24 @@ main(int argc, char **argv)
     listenfd = socket(servinfo->ai_family, servinfo->ai_socktype,
                       servinfo->ai_protocol);
     if (listenfd == -1) {
-        perror("socket");
         result = DBESOCKET;
+        DBLOG(result);
         goto done;
     }
 
     // make the socket reusable
     result = setsockopt(listenfd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int));
     if (result == -1) {
-        perror("setsockopt");
         result = DBESETSOCKOPT;
+        DBLOG(result);
         goto cleanup_listenfd;
     }
 
     // bind the file descriptor to a port
     result = bind(listenfd, servinfo->ai_addr, servinfo->ai_addrlen);
     if (result == -1) {
-        perror("bind");
         result = DBEBIND;
+        DBLOG(result);
         goto cleanup_listenfd;
     }
     freeaddrinfo(servinfo);
@@ -713,8 +658,8 @@ main(int argc, char **argv)
     // put the socket in listening mode
     result = listen(listenfd, server_options.sopt_backlog);
     if (result == -1) {
-        perror("listen");
         result = DBELISTEN;
+        DBLOG(result);
         goto cleanup_listenfd;
     }
 
@@ -725,8 +670,8 @@ main(int argc, char **argv)
     sigemptyset( &sig.sa_mask );
     result = sigaction( SIGINT, &sig, NULL );
     if (result == -1) {
-        perror("sigaction");
         result = DBESIGACTION;
+        DBLOG(result);
         goto done;
     }
 
@@ -749,8 +694,8 @@ main(int argc, char **argv)
     while (keep_running) {
         acceptfd = accept(listenfd, NULL, NULL);
         if (acceptfd == -1) {
-            perror("accept");
             result = DBEACCEPT;
+            DBLOG(result);
             goto shutdown;
         }
 
@@ -758,19 +703,15 @@ main(int argc, char **argv)
         // if we can't add it, clean up the file descriptor.
         // if we are successful, the threadpool will handle
         // cleaning up the file descriptor
-        struct server_jobctx *sjob =
-                server_jobctx_create(acceptfd, jobid++, storage);
-        if (sjob == NULL) {
-            goto cleanup_acceptfd;
-        }
+        struct server_jobctx *sjob;
+        TRYNULL(result, DBENOMEM, sjob,
+                server_jobctx_create(acceptfd, jobid++, storage),
+                cleanup_acceptfd);
 
         struct job job;
         job.j_arg = (void *) sjob;
         job.j_routine = server_routine;
-        result = threadpool_add_job(tpool, &job);
-        if (result == -1) {
-            goto cleanup_sjob;
-        }
+        TRY(result, threadpool_add_job(tpool, &job), cleanup_sjob);
         continue;
 
       cleanup_sjob:

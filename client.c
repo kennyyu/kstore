@@ -20,6 +20,7 @@
 #include "src/common/include/parser.h"
 #include "src/common/include/io.h"
 #include "src/common/include/dberror.h"
+#include "src/common/include/try.h"
 
 // boolean to tell the client to keep looping
 static bool volatile keep_running = true;
@@ -82,26 +83,18 @@ parse_stdin(int readfd, int writefd)
             break;
         }
     }
-    struct oparray *ops = parse_query(buf);
-    if (ops == NULL) {
-        result = DBENOMEM;
-        goto done;
-    }
+    struct oparray *ops;
+    TRYNULL(result, DBEPARSE, ops, parse_query(buf), done);
+
     for (unsigned i = 0; i < oparray_num(ops); i++) {
         struct op *op = oparray_get(ops, i);
-        result = rpc_write_query(writefd, op);
-        if (result) {
-            goto cleanup_ops;
-        }
+        TRY(result, rpc_write_query(writefd, op), cleanup_ops);
         if (op->op_type == OP_LOAD) {
             char loadfilebuf[128];
             sprintf(loadfilebuf, "%s/%s", client_options.copt_loaddir,
                     op->op_load.op_load_file);
             strcpy(op->op_load.op_load_file, loadfilebuf);
-            result = rpc_write_file(writefd, op);
-            if (result) {
-                goto cleanup_ops;
-            }
+            TRY(result, rpc_write_file(writefd, op), cleanup_ops);
         }
     }
     // success
@@ -109,6 +102,9 @@ parse_stdin(int readfd, int writefd)
   cleanup_ops:
     parse_cleanup_ops(ops);
   done:
+    if (!dberror_client_is_fatal(result)) {
+        result = DBSUCCESS;
+    }
     return result;
 }
 
@@ -120,10 +116,8 @@ client_handle_fetch(int readfd, int writefd, struct rpc_header *msg)
     assert(msg->rpc_type == RPC_FETCH_RESULT);
     int *vals = NULL;
     int nvals;
-    int result = rpc_read_fetch_result(readfd, msg, &vals, &nvals);
-    if (result) {
-        goto done;
-    }
+    int result;
+    TRY(result, rpc_read_fetch_result(readfd, msg, &vals, &nvals), done);
     assert(vals != NULL);
     for (unsigned i = 0; i < nvals; i++) {
         printf("%d\n", vals[i]);
@@ -144,10 +138,8 @@ client_handle_error(int readfd, int writefd, struct rpc_header *msg)
     (void) writefd;
     assert(msg->rpc_type == RPC_ERROR);
     char *error = NULL;
-    int result = rpc_read_error(readfd, msg, &error);
-    if (result) {
-        goto done;
-    }
+    int result;
+    TRY(result, rpc_read_error(readfd, msg, &error), done);
     assert(error != NULL);
     printf("ERROR: %s\n", error);
     free(error);
@@ -165,10 +157,8 @@ client_handle_tuple(int readfd, int writefd, struct rpc_header *msg)
     assert(msg->rpc_type == RPC_TUPLE_RESULT);
     int *tuple = NULL;
     unsigned len;
-    int result = rpc_read_tuple_result(readfd, msg, &tuple, &len);
-    if (result) {
-        goto done;
-    }
+    int result;
+    TRY(result, rpc_read_tuple_result(readfd, msg, &tuple, &len), done);
     assert(tuple != NULL);
     printf("(");
     for (unsigned i = 0; i < len - 1; i++) {
@@ -191,10 +181,7 @@ parse_sockfd(int readfd, int writefd)
     (void) writefd;
     int result;
     struct rpc_header msg;
-    result = rpc_read_header(readfd, &msg);
-    if (result) {
-        goto done;
-    }
+    TRY(result, rpc_read_header(readfd, &msg), done);
     switch (msg.rpc_type) {
     case RPC_TERMINATE:
         if (client_options.copt_interactive) {
@@ -223,6 +210,9 @@ parse_sockfd(int readfd, int writefd)
     result = 0;
     goto done;
   done:
+    if (!dberror_client_is_fatal(result)) {
+        result = DBSUCCESS;
+    }
     return result;
 }
 
@@ -275,8 +265,8 @@ main(int argc, char **argv)
     sprintf(portbuf, "%d", client_options.copt_port);
     result = getaddrinfo(client_options.copt_host, portbuf, &hints, &servinfo);
     if (result != 0) {
-        perror("getaddrinfo");
         result = DBEGETADDRINFO;
+        DBLOG(result);
         goto done;
     }
 
@@ -284,8 +274,8 @@ main(int argc, char **argv)
     sockfd = socket(servinfo->ai_family, servinfo->ai_socktype,
                     servinfo->ai_protocol);
     if (sockfd == -1) {
-        perror("socket");
         result = DBESOCKET;
+        DBLOG(result);
         goto done;
     }
     freeaddrinfo(servinfo);
@@ -293,8 +283,8 @@ main(int argc, char **argv)
     // wait for a connection to the server
     result = connect(sockfd, servinfo->ai_addr, servinfo->ai_addrlen);
     if (result == -1) {
-        perror("connect");
         result = DBECONNECT;
+        DBLOG(result);
         goto cleanup_sockfd;
     }
 
@@ -305,8 +295,8 @@ main(int argc, char **argv)
     sigemptyset( &sig.sa_mask );
     result = sigaction( SIGINT, &sig, NULL );
     if (result == -1) {
-        perror("sigaction");
         result = DBESIGACTION;
+        DBLOG(result);
         goto done;
     }
 
@@ -327,8 +317,8 @@ main(int argc, char **argv)
         }
         result = select(sockfd + 1, &readfds, NULL, NULL, NULL);
         if (result == -1) {
-            perror("select");
             result = DBESELECT;
+            DBLOG(result);
             goto cleanup_sockfd;
         }
 

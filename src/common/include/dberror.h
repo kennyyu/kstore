@@ -2,6 +2,7 @@
 #define _DBERROR_H_
 
 #include <stdio.h>
+#include <stdbool.h>
 #include "cassert.h"
 
 enum dberror {
@@ -29,9 +30,13 @@ enum dberror {
     DBECSV,
     DBECOLSELECT,
     DBECOLFETCH,
+    DBECLIENTTERM,
 };
 
 const char *dberror_string(enum dberror result);
+
+bool dberror_server_is_fatal(enum dberror result);
+bool dberror_client_is_fatal(enum dberror result);
 
 void dberror_log(char *msg,
                  const char *file,
