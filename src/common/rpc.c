@@ -17,9 +17,6 @@
 #include "include/dberror.h"
 #include "include/array.h"
 
-DECLARRAY_BYTYPE(idarray, unsigned);
-DEFARRAY_BYTYPE(idarray, unsigned, /* no inline */);
-
 // 64 bit conversion taken from:
 // http://stackoverflow.com/questions/809902/64-bit-ntohl-in-c
 static
