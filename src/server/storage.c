@@ -1140,12 +1140,17 @@ column_fetch(struct column *col, struct column_ids *ids)
 {
     assert(col != NULL);
     assert(ids != NULL);
-    rwlock_acquire_read(col->col_rwlock);
-    uint64_t ntuples = col->col_disk.cd_ntuples;
-    assert(ntuples == bitmap_nbits(ids->cid_bitmap));
-
     int result;
     struct column_vals *cvals = NULL;
+
+    rwlock_acquire_read(col->col_rwlock);
+    uint64_t ntuples = col->col_disk.cd_ntuples;
+    if (ntuples != bitmap_nbits(ids->cid_bitmap)) {
+        result = DBECOLDIFFLEN;
+        DBLOG(result);
+        goto done;
+    }
+
     struct valarray *vals;
     TRYNULL(result, DBENOMEM, vals, valarray_create(), done);
 
@@ -1161,6 +1166,7 @@ column_fetch(struct column *col, struct column_ids *ids)
         break;
     }
     if (result) {
+        DBLOG(result);
         goto cleanup_vals;
     }
 
@@ -1168,10 +1174,8 @@ column_fetch(struct column *col, struct column_ids *ids)
     // struct column_vals
     TRYNULL(result, DBENOMEM, cvals, malloc(sizeof(struct column_vals)), cleanup_vals);
     cvals->cval_len = valarray_num(vals);
-    cvals->cval_vals = malloc(sizeof(int) * cvals->cval_len);
-    if (cvals->cval_vals == NULL) {
-        goto cleanup_malloc;
-    }
+    TRYNULL(result, DBENOMEM, cvals->cval_vals,
+            malloc(sizeof(int) * cvals->cval_len), cleanup_malloc);
     memcpy(cvals->cval_vals, vals->arr.v, sizeof(int) * cvals->cval_len);
     result = 0;
     goto cleanup_vals;

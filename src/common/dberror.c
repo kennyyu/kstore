@@ -36,8 +36,9 @@ dberror_string(enum dberror result)
     case DBECOLFETCH: return "column fetch error";
     case DBECLIENTTERM: return "client terminated connection";
     case DBEAGG: return "aggregation error";
-    case DBECOLDIFFLEN: return "columns/intermediates have different lengths";
+    case DBEINTERMDIFFLEN: return "intermediates have different lengths";
     case DBEDIVZERO: return "division by zero";
+    case DBECOLDIFFLEN: return "select intermediate and column have different lengths";
     default:
         assert(0);
         return NULL;

@@ -103,7 +103,7 @@ column_math(struct column_vals *valsleft,
     // Make sure the columns have the same length
     int result;
     if (valsleft->cval_len != valsright->cval_len) {
-        result = DBECOLDIFFLEN;
+        result = DBEINTERMDIFFLEN;
         DBLOG(result);
         goto done;
     }
