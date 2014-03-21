@@ -15,6 +15,8 @@
 #include <sys/select.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <readline/readline.h>
+#include <readline/history.h>
 #include "src/common/include/rpc.h"
 #include "src/common/include/operators.h"
 #include "src/common/include/parser.h"
@@ -64,14 +66,19 @@ const struct option long_options[] = {
 #define BUFSIZE 4096
 
 static
-int
-parse_stdin(int readfd, int writefd)
+//int
+//parse_stdin(int readfd, int writefd)
+void
+parse_stdin(char *input)
 {
     int result;
-    char buf[TUPLELEN];
-    bzero(buf, TUPLELEN);
-    result = 0;
-    unsigned ix = 0;
+    int writefd = 3;
+    //char buf[TUPLELEN];
+    //bzero(buf, TUPLELEN);
+    //char *input;
+    //result = 0;
+    //unsigned ix = 0;
+    /*
     while (1) {
         result = read(readfd, buf + ix, 1);
         if (result == -1 || result == 0) {
@@ -83,8 +90,25 @@ parse_stdin(int readfd, int writefd)
             break;
         }
     }
+    */
+    //if (client_options.copt_interactive) {
+    //    printf("\r     \r");
+    //    fflush(stdout);
+    //}
+    //input = readline(">>> ");
+    if (input == NULL) {
+        result = DBEIOEARLYEOF;
+        goto done;
+    }
+    if(strlen(input) == 0) {
+        free(input);
+        goto done;
+    }
+    printf("you typed: %s\n", input);
     struct oparray *ops;
-    TRYNULL(result, DBEPARSE, ops, parse_query(buf), done);
+    TRYNULL(result, DBEPARSE, ops, parse_query(input), done);
+    //add_history(input);
+    free(input);
 
     for (unsigned i = 0; i < oparray_num(ops); i++) {
         struct op *op = oparray_get(ops, i);
@@ -105,7 +129,10 @@ parse_stdin(int readfd, int writefd)
     if (!dberror_client_is_fatal(result)) {
         result = DBSUCCESS;
     }
-    return result;
+    if (result) {
+        DBLOG(result);
+    }
+    //return result;
 }
 
 static
@@ -141,7 +168,7 @@ client_handle_error(int readfd, int writefd, struct rpc_header *msg)
     int result;
     TRY(result, rpc_read_error(readfd, msg, &error), done);
     assert(error != NULL);
-    printf("[SERVER ERROR: %s]\n", error);
+    fprintf(stderr, "[SERVER ERROR: %s]\n", error);
     free(error);
 
     result = 0;
@@ -300,6 +327,8 @@ main(int argc, char **argv)
         goto done;
     }
 
+    rl_callback_handler_install("PROMPT> ", (rl_vcpfunc_t*) &parse_stdin);
+
     bool read_stdin = true;
     bool read_socket = true;
     while (keep_running && (read_stdin || read_socket)) {
@@ -308,8 +337,8 @@ main(int argc, char **argv)
         if (read_stdin) {
             FD_SET(STDIN_FILENO, &readfds);
             if (client_options.copt_interactive) {
-                printf(">>> ");
-                fflush(stdout);
+                //printf(">>> ");
+                //fflush(stdout);
             }
         }
         if (read_socket) {
@@ -324,6 +353,8 @@ main(int argc, char **argv)
 
         // if we get something from stdin, parse it and write it to the socket
         if (read_stdin && FD_ISSET(STDIN_FILENO, &readfds)) {
+            rl_callback_read_char();
+            /*
             result = parse_stdin(STDIN_FILENO, sockfd);
             if (result) {
                 if (client_options.copt_interactive) {
@@ -334,6 +365,7 @@ main(int argc, char **argv)
                 read_stdin = false;
                 (void) rpc_write_terminate(sockfd);
             }
+            */
         }
 
         // if we get something from the socket, parse it and write it to stdout
@@ -350,6 +382,7 @@ main(int argc, char **argv)
     }
 
   cleanup_sockfd:
+    rl_callback_handler_remove();
     (void) rpc_write_terminate(sockfd);
     assert(close(sockfd) == 0);
   done:

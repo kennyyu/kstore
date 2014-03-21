@@ -28,6 +28,7 @@
 INCDIR = include
 OBJDIR = obj
 SRCDIR = src
+LIBDIR = lib
 
 SERVER = server
 CLIENT = client
@@ -48,16 +49,23 @@ SERVER_OBJDIR = $(OBJDIR)/$(SERVER)
 CLIENT_OBJDIR = $(OBJDIR)/$(CLIENT)
 COMMON_OBJDIR = $(OBJDIR)/$(COMMON)
 
+SERVER_LIBDIR = $(SRCDIR)/$(SERVER)/$(LIBDIR)
+CLIENT_LIBDIR = $(SRCDIR)/$(CLIENT)/$(LIBDIR)
+COMMON_LIBDIR = $(SRCDIR)/$(COMMON)/$(LIBDIR)
+
 SERVER_DEPS = $(wildcard $(SERVER_INCDIR)/*.h)
 SERVER_SRCS = $(wildcard $(SERVER_SRCDIR)/*.c)
+SERVER_LIBS = $(wildcard $(SERVER_LIBDIR)/*.a)
 SERVER_OBJS = $(addprefix $(SERVER_OBJDIR)/,$(notdir $(SERVER_SRCS:.c=.o)))
 
 CLIENT_DEPS = $(wildcard $(CLIENT_INCDIR)/*.h)
 CLIENT_SRCS = $(wildcard $(CLIENT_SRCDIR)/*.c)
+CLIENT_LIBS = $(wildcard $(CLIENT_LIBDIR)/*.a)
 CLIENT_OBJS = $(addprefix $(CLIENT_OBJDIR)/,$(notdir $(CLIENT_SRCS:.c=.o)))
 
 COMMON_DEPS = $(wildcard $(COMMON_INCDIR)/*.h)
 COMMON_SRCS = $(wildcard $(COMMON_SRCDIR)/*.c)
+COMMON_LIBS = $(wildcard $(COMMON_LIBDIR)/*.a)
 COMMON_OBJS = $(addprefix $(COMMON_OBJDIR)/,$(notdir $(COMMON_SRCS:.c=.o)))
 
 TEST_SRCS = $(wildcard $(TEST_SRCDIR)/*.c)
@@ -66,7 +74,7 @@ TEST_BINS = $(addprefix $(TEST_OBJDIR)/,$(notdir $(TEST_SRCS:.c=)))
 
 CC = gcc
 CFLAGS = -Wall -Werror -ggdb -std=gnu99 -m32
-LIBS = -lm -lpthread
+LIBS = -lm -lpthread -lncurses
 
 $(TEST_OBJDIR)/%_test: $(TEST_OBJDIR)/%_test.o $(COMMON_OBJS) $(SERVER_OBJS) $(CLIENT_OBJS)
 	$(CC) -o $@ $^ $(CFLAGS) -I$(COMMON_INCDIR) -I$(SERVER_INCDIR) -I$(CLIENT_INCDIR) $(LIBS)
@@ -99,11 +107,19 @@ test: server client $(TEST_BINS)
 	done
 	@echo ">>> TESTS DONE"
 
+server.o: server.c $(SERVER_DEPS) $(COMMON_OBJS) $(COMMON_DEPS)
+	@mkdir -p $(SERVER_OBJDIR)
+	$(CC) -c -o $@ $< $(CFLAGS) -I$(SERVER_INCDIR) -I$(COMMON_INCDIR)
+
+client.o: client.c $(CLIENT_DEPS) $(COMMON_OBJS) $(COMMON_DEPS)
+	@mkdir -p $(CLIENT_OBJDIR)
+	$(CC) -c -o $@ $< $(CFLAGS) -I$(CLIENT_INCDIR) -I$(COMMON_INCDIR)
+
 server: $(COMMON_OBJS) $(SERVER_OBJS) server.o
-	$(CC) -o $@ $^ $(CFLAGS) -I$(SERVER_INCDIR) -I$(COMMON_INCDIR) $(LIBS)
+	$(CC) -o $@ $^ $(CFLAGS) -I$(SERVER_INCDIR) -I$(COMMON_INCDIR) $(SERVER_LIBS) $(COMMON_LIBS) $(LIBS)
 
 client: $(COMMON_OBJS) $(CLIENT_OBJS) client.o
-	$(CC) -o $@ $^ $(CFLAGS) -I$(CLIENT_INCDIR) -I$(COMMON_INCDIR) $(LIBS)
+	$(CC) -o $@ $^ $(CFLAGS) -I$(CLIENT_INCDIR) -I$(COMMON_INCDIR) $(CLIENT_LIBS) $(COMMON_LIBS) $(LIBS)
 
 clean:
 	rm -rf $(OBJDIR) *~ core client server *.o $(TEST_OBJDIR)
