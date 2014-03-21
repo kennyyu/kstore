@@ -411,6 +411,55 @@ server_eval_agg(struct server_jobctx *jobctx, struct op *op) {
 
 static
 int
+server_eval_math(struct server_jobctx *jobctx, struct op *op) {
+    assert(jobctx != NULL);
+    assert(op != NULL);
+    assert(op->op_type == OP_MATH);
+
+    int result;
+
+    // Try to find the column intermediates
+    struct vartuple *vleft, *vright;
+    TRYNULL(result, DBENOVAR, vleft,
+            server_eval_get_var(jobctx->sj_env, op->op_math.op_math_col1),
+            done);
+    TRYNULL(result, DBENOVAR, vright,
+            server_eval_get_var(jobctx->sj_env, op->op_math.op_math_col2),
+            done);
+    if (vleft->vt_type != VAR_VALS || vright->vt_type != VAR_VALS) {
+        result = DBEVARTYPE;
+        DBLOG(result);
+        goto done;
+    }
+
+    // Perform the aggregation
+    math_func_t mathf = math_func(op->op_math.op_math_mtype);
+    struct column_vals *mathvals;
+    TRY(result, column_math(vleft->vt_column_vals,
+                            vright->vt_column_vals, mathf, &mathvals), done);
+    assert(mathvals != NULL);
+
+    // If this is an assignment, add it to the environment
+    if (op->op_math.op_math_assign) {
+        TRY(result, server_add_var(jobctx->sj_env, op->op_math.op_math_var,
+                                   VAR_VALS, NULL, mathvals), cleanup_mathval);
+        result = 0;
+        goto done; // don't destroy vals
+    } else {
+        qsort(mathvals->cval_vals, mathvals->cval_len, sizeof(int), int_compare);
+        TRY(result, rpc_write_fetch_result(jobctx->sj_fd, mathvals), cleanup_mathval);
+        result = 0;
+        goto cleanup_mathval; // destroy the intermediate
+    }
+
+  cleanup_mathval:
+    column_vals_destroy(mathvals);
+  done:
+    return result;
+}
+
+static
+int
 server_eval_insert(struct server_jobctx *jobctx, struct op *op)
 {
     assert(jobctx != NULL);
@@ -523,6 +572,8 @@ server_eval(struct server_jobctx *jobctx, struct op *op)
         return server_eval_tuple(jobctx, op);
     case OP_AGG:
         return server_eval_agg(jobctx, op);
+    case OP_MATH:
+        return server_eval_math(jobctx, op);
     default:
         assert(0);
         return -1;

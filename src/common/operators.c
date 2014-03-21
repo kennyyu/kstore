@@ -94,12 +94,12 @@ char *op_string(struct op *op) {
         if (op->op_math.op_math_assign) {
             sprintf(buf, "%s=%s(%s,%s)",
                     op->op_math.op_math_var,
-                    math_type_string(op->op_math.op_math_atype),
+                    math_type_string(op->op_math.op_math_mtype),
                     op->op_math.op_math_col1,
                     op->op_math.op_math_col2);
         } else {
             sprintf(buf, "%s(%s,%s)",
-                    math_type_string(op->op_math.op_math_atype),
+                    math_type_string(op->op_math.op_math_mtype),
                     op->op_math.op_math_col1,
                     op->op_math.op_math_col2);
         }

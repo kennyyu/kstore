@@ -91,7 +91,7 @@ struct op_agg {
 };
 
 struct op_math {
-    enum math_type op_math_atype;
+    enum math_type op_math_mtype;
     bool op_math_assign;
     char op_math_var[COLUMNLEN];
     char op_math_col1[COLUMNLEN];

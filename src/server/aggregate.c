@@ -88,3 +88,87 @@ agg_func(enum agg_type atype)
     default: assert(0); return NULL;
     }
 }
+
+int
+column_math(struct column_vals *valsleft,
+            struct column_vals *valsright,
+            math_func_t f,
+            struct column_vals **retvals)
+{
+    assert(valsleft != NULL);
+    assert(valsright != NULL);
+    assert(retvals != NULL);
+    assert(f != NULL);
+
+    // Make sure the columns have the same length
+    int result;
+    if (valsleft->cval_len != valsright->cval_len) {
+        result = DBECOLDIFFLEN;
+        DBLOG(result);
+        goto done;
+    }
+
+    // Now compute the math result
+    struct column_vals *mathvals;
+    TRYNULL(result, DBENOMEM, mathvals, malloc(sizeof(struct column_vals)), done);
+    TRYNULL(result, DBENOMEM, mathvals->cval_vals,
+            malloc(sizeof(int) * valsleft->cval_len), cleanup_vals);
+    mathvals->cval_len = valsleft->cval_len;
+    for (unsigned i = 0; i < mathvals->cval_len; i++) {
+        int left = valsleft->cval_vals[i];
+        int right = valsright->cval_vals[i];
+        if (f == math_div && right == 0) {
+            result = DBEDIVZERO; // handle division by zero
+            DBLOG(result);
+            goto cleanup_mathvals;
+        }
+        mathvals->cval_vals[i] = f(left, right);
+    }
+
+    // success
+    result = 0;
+    *retvals = mathvals;
+    goto done;
+  cleanup_mathvals:
+    free(mathvals->cval_vals);
+  cleanup_vals:
+    free(mathvals);
+  done:
+    return result;
+}
+
+int
+math_add(int a, int b)
+{
+    return a + b;
+}
+
+int
+math_sub(int a, int b)
+{
+    return a - b;
+}
+
+int
+math_div(int a, int b)
+{
+    assert(b != 0); // caller is responsible for checking
+    return a / b;
+}
+
+int math_mul(int a, int b)
+{
+    return a * b;
+}
+
+math_func_t
+math_func(enum math_type mtype)
+{
+    switch (mtype) {
+    case MATH_ADD: return math_add;
+    case MATH_SUB: return math_sub;
+    case MATH_DIV: return math_div;
+    case MATH_MUL: return math_mul;
+    default: assert(0); return NULL;
+    }
+}

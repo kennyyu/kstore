@@ -18,4 +18,18 @@ int agg_avg(struct column_vals *vals);
 
 agg_func_t agg_func(enum agg_type atype);
 
+typedef int (*math_func_t)(int, int);
+
+int column_math(struct column_vals *valsleft,
+                struct column_vals *valsright,
+                math_func_t f,
+                struct column_vals **retvals);
+
+int math_add(int a, int b);
+int math_sub(int a, int b);
+int math_div(int a, int b);
+int math_mul(int a, int b);
+
+math_func_t math_func(enum math_type mtype);
+
 #endif

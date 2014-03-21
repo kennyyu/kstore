@@ -211,7 +211,7 @@ void testaddassign(void) {
     assert(oparray_num(ops) == 1);
     struct op *op = oparray_get(ops, 0);
     assert(op->op_type == OP_MATH);
-    assert(op->op_math.op_math_atype == MATH_ADD);
+    assert(op->op_math.op_math_mtype == MATH_ADD);
     assert(strcmp(op->op_math.op_math_col1,"aout") == 0);
     assert(strcmp(op->op_math.op_math_col2,"bout") == 0);
     assert(op->op_math.op_math_assign == true);
@@ -228,7 +228,7 @@ void testadd(void) {
     assert(oparray_num(ops) == 1);
     struct op *op = oparray_get(ops, 0);
     assert(op->op_type == OP_MATH);
-    assert(op->op_math.op_math_atype == MATH_ADD);
+    assert(op->op_math.op_math_mtype == MATH_ADD);
     assert(strcmp(op->op_math.op_math_col1,"aout") == 0);
     assert(strcmp(op->op_math.op_math_col2,"bout") == 0);
     assert(op->op_math.op_math_assign == false);
@@ -244,7 +244,7 @@ void testsubassign(void) {
     assert(oparray_num(ops) == 1);
     struct op *op = oparray_get(ops, 0);
     assert(op->op_type == OP_MATH);
-    assert(op->op_math.op_math_atype == MATH_SUB);
+    assert(op->op_math.op_math_mtype == MATH_SUB);
     assert(strcmp(op->op_math.op_math_col1,"aout") == 0);
     assert(strcmp(op->op_math.op_math_col2,"bout") == 0);
     assert(op->op_math.op_math_assign == true);
@@ -261,7 +261,7 @@ void testsub(void) {
     assert(oparray_num(ops) == 1);
     struct op *op = oparray_get(ops, 0);
     assert(op->op_type == OP_MATH);
-    assert(op->op_math.op_math_atype == MATH_SUB);
+    assert(op->op_math.op_math_mtype == MATH_SUB);
     assert(strcmp(op->op_math.op_math_col1,"aout") == 0);
     assert(strcmp(op->op_math.op_math_col2,"bout") == 0);
     assert(op->op_math.op_math_assign == false);
@@ -277,7 +277,7 @@ void testmulassign(void) {
     assert(oparray_num(ops) == 1);
     struct op *op = oparray_get(ops, 0);
     assert(op->op_type == OP_MATH);
-    assert(op->op_math.op_math_atype == MATH_MUL);
+    assert(op->op_math.op_math_mtype == MATH_MUL);
     assert(strcmp(op->op_math.op_math_col1,"aout") == 0);
     assert(strcmp(op->op_math.op_math_col2,"bout") == 0);
     assert(op->op_math.op_math_assign == true);
@@ -294,7 +294,7 @@ void testmul(void) {
     assert(oparray_num(ops) == 1);
     struct op *op = oparray_get(ops, 0);
     assert(op->op_type == OP_MATH);
-    assert(op->op_math.op_math_atype == MATH_MUL);
+    assert(op->op_math.op_math_mtype == MATH_MUL);
     assert(strcmp(op->op_math.op_math_col1,"aout") == 0);
     assert(strcmp(op->op_math.op_math_col2,"bout") == 0);
     assert(op->op_math.op_math_assign == false);
@@ -310,7 +310,7 @@ void testdivassign(void) {
     assert(oparray_num(ops) == 1);
     struct op *op = oparray_get(ops, 0);
     assert(op->op_type == OP_MATH);
-    assert(op->op_math.op_math_atype == MATH_DIV);
+    assert(op->op_math.op_math_mtype == MATH_DIV);
     assert(strcmp(op->op_math.op_math_col1,"aout") == 0);
     assert(strcmp(op->op_math.op_math_col2,"bout") == 0);
     assert(op->op_math.op_math_assign == true);
@@ -327,7 +327,7 @@ void testdiv(void) {
     assert(oparray_num(ops) == 1);
     struct op *op = oparray_get(ops, 0);
     assert(op->op_type == OP_MATH);
-    assert(op->op_math.op_math_atype == MATH_DIV);
+    assert(op->op_math.op_math_mtype == MATH_DIV);
     assert(strcmp(op->op_math.op_math_col1,"aout") == 0);
     assert(strcmp(op->op_math.op_math_col2,"bout") == 0);
     assert(op->op_math.op_math_assign == false);

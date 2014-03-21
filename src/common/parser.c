@@ -174,7 +174,7 @@ parse_line(char *line)
         (char *) &op->op_math.op_math_col1,
         (char *) &op->op_math.op_math_col2) == 3) {
         op->op_type = OP_MATH;
-        op->op_math.op_math_atype = MATH_ADD;
+        op->op_math.op_math_mtype = MATH_ADD;
         op->op_math.op_math_assign = true;
         goto done;
     }
@@ -183,7 +183,7 @@ parse_line(char *line)
         (char *) &op->op_math.op_math_col1,
         (char *) &op->op_math.op_math_col2) == 2) {
         op->op_type = OP_MATH;
-        op->op_math.op_math_atype = MATH_ADD;
+        op->op_math.op_math_mtype = MATH_ADD;
         op->op_math.op_math_assign = false;
         goto done;
     }
@@ -193,7 +193,7 @@ parse_line(char *line)
         (char *) &op->op_math.op_math_col1,
         (char *) &op->op_math.op_math_col2) == 3) {
         op->op_type = OP_MATH;
-        op->op_math.op_math_atype = MATH_SUB;
+        op->op_math.op_math_mtype = MATH_SUB;
         op->op_math.op_math_assign = true;
         goto done;
     }
@@ -202,7 +202,7 @@ parse_line(char *line)
         (char *) &op->op_math.op_math_col1,
         (char *) &op->op_math.op_math_col2) == 2) {
         op->op_type = OP_MATH;
-        op->op_math.op_math_atype = MATH_SUB;
+        op->op_math.op_math_mtype = MATH_SUB;
         op->op_math.op_math_assign = false;
         goto done;
     }
@@ -212,7 +212,7 @@ parse_line(char *line)
         (char *) &op->op_math.op_math_col1,
         (char *) &op->op_math.op_math_col2) == 3) {
         op->op_type = OP_MATH;
-        op->op_math.op_math_atype = MATH_MUL;
+        op->op_math.op_math_mtype = MATH_MUL;
         op->op_math.op_math_assign = true;
         goto done;
     }
@@ -221,7 +221,7 @@ parse_line(char *line)
         (char *) &op->op_math.op_math_col1,
         (char *) &op->op_math.op_math_col2) == 2) {
         op->op_type = OP_MATH;
-        op->op_math.op_math_atype = MATH_MUL;
+        op->op_math.op_math_mtype = MATH_MUL;
         op->op_math.op_math_assign = false;
         goto done;
     }
@@ -231,7 +231,7 @@ parse_line(char *line)
         (char *) &op->op_math.op_math_col1,
         (char *) &op->op_math.op_math_col2) == 3) {
         op->op_type = OP_MATH;
-        op->op_math.op_math_atype = MATH_DIV;
+        op->op_math.op_math_mtype = MATH_DIV;
         op->op_math.op_math_assign = true;
         goto done;
     }
@@ -240,7 +240,7 @@ parse_line(char *line)
         (char *) &op->op_math.op_math_col1,
         (char *) &op->op_math.op_math_col2) == 2) {
         op->op_type = OP_MATH;
-        op->op_math.op_math_atype = MATH_DIV;
+        op->op_math.op_math_mtype = MATH_DIV;
         op->op_math.op_math_assign = false;
         goto done;
     }
