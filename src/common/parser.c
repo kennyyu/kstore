@@ -329,6 +329,12 @@ parse_line(char *line)
         op->op_agg.op_agg_assign = false;
         goto done;
     }
+    bzero(op, sizeof(struct op));
+    if (sscanf(line, "print(%[^,)])",
+        (char *) &op->op_print.op_print_var) == 1) {
+        op->op_type = OP_PRINT;
+        goto done;
+    }
     goto cleanup_op;
 
   cleanup_op:

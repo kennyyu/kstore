@@ -16,6 +16,7 @@
 enum rpc_type {
     RPC_QUERY,
     RPC_FILE,
+    RPC_SELECT_RESULT,
     RPC_FETCH_RESULT,
     RPC_ERROR,
     RPC_TERMINATE,
@@ -41,7 +42,12 @@ int rpc_read_file(int fd, struct rpc_header *msg, char *filename, int *retfd);
 
 int rpc_write_fetch_result(int fd, struct column_vals *vals);
 // the retvals must be freed
-int rpc_read_fetch_result(int fd, struct rpc_header *msg, int **retvals, int *retn);
+int rpc_read_fetch_result(int fd, struct rpc_header *msg, int **retvals, unsigned *retn);
+
+int rpc_write_select_result(int fd, struct column_ids *cids);
+// the retids must be freed
+int rpc_read_select_result(int fd, struct rpc_header *msg,
+                           unsigned **retids, unsigned *retn);
 
 int rpc_write_tuple_result(int fd, struct column_vals **tuples, unsigned len);
 // the rettuple must be freed

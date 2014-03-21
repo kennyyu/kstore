@@ -21,6 +21,7 @@ enum op_type {
     OP_TUPLE,
     OP_AGG,
     OP_MATH,
+    OP_PRINT,
 };
 
 enum storage_type {
@@ -98,6 +99,10 @@ struct op_math {
     char op_math_col2[COLUMNLEN];
 };
 
+struct op_print {
+    char op_print_var[COLUMNLEN];
+};
+
 struct op {
     enum op_type op_type;
     union {
@@ -109,6 +114,7 @@ struct op {
         struct op_tuple op_tuple;
         struct op_agg op_agg;
         struct op_math op_math;
+        struct op_print op_print;
     };
 };
 

@@ -115,7 +115,7 @@ client_handle_fetch(int readfd, int writefd, struct rpc_header *msg)
     (void) writefd;
     assert(msg->rpc_type == RPC_FETCH_RESULT);
     int *vals = NULL;
-    int nvals;
+    unsigned nvals;
     int result;
     TRY(result, rpc_read_fetch_result(readfd, msg, &vals, &nvals), done);
     assert(vals != NULL);
@@ -123,6 +123,29 @@ client_handle_fetch(int readfd, int writefd, struct rpc_header *msg)
         printf("%d\n", vals[i]);
     }
     free(vals);
+
+    result = 0;
+    goto done;
+
+  done:
+    return result;
+}
+
+static
+int
+client_handle_select(int readfd, int writefd, struct rpc_header *msg)
+{
+    (void) writefd;
+    assert(msg->rpc_type == RPC_SELECT_RESULT);
+    unsigned *ids = NULL;
+    unsigned nids;
+    int result;
+    TRY(result, rpc_read_select_result(readfd, msg, &ids, &nids), done);
+    assert(ids != NULL);
+    for (unsigned i = 0; i < nids; i++) {
+        printf("%d\n", ids[i]);
+    }
+    free(ids);
 
     result = 0;
     goto done;
@@ -150,6 +173,7 @@ client_handle_error(int readfd, int writefd, struct rpc_header *msg)
     return result;
 }
 
+static
 int
 client_handle_tuple(int readfd, int writefd, struct rpc_header *msg)
 {
@@ -191,6 +215,9 @@ parse_sockfd(int readfd, int writefd)
         break;
     case RPC_FETCH_RESULT:
         result = client_handle_fetch(readfd, writefd, &msg);
+        break;
+    case RPC_SELECT_RESULT:
+        result = client_handle_select(readfd, writefd, &msg);
         break;
     case RPC_TUPLE_RESULT:
         result = client_handle_tuple(readfd, writefd, &msg);

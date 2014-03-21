@@ -104,6 +104,9 @@ char *op_string(struct op *op) {
                     op->op_math.op_math_col2);
         }
         break;
+    case OP_PRINT:
+        sprintf(buf, "print(%s)", op->op_print.op_print_var);
+        break;
     default: assert(0); return NULL;
     }
 

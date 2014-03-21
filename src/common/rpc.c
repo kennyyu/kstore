@@ -15,6 +15,10 @@
 #include "include/operators.h"
 #include "include/parser.h"
 #include "include/dberror.h"
+#include "include/array.h"
+
+DECLARRAY_BYTYPE(idarray, unsigned);
+DEFARRAY_BYTYPE(idarray, unsigned, /* no inline */);
 
 // 64 bit conversion taken from:
 // http://stackoverflow.com/questions/809902/64-bit-ntohl-in-c
@@ -272,7 +276,7 @@ rpc_write_fetch_result(int fd, struct column_vals *vals)
 
 // the retvals must be freed
 int
-rpc_read_fetch_result(int fd, struct rpc_header *msg, int **retvals, int *retn)
+rpc_read_fetch_result(int fd, struct rpc_header *msg, int **retvals, unsigned *retn)
 {
     assert(retvals != NULL);
     assert(retn != NULL);
@@ -294,6 +298,71 @@ rpc_read_fetch_result(int fd, struct rpc_header *msg, int **retvals, int *retn)
     // success
     result = 0;
     *retvals = vals;
+    *retn = nvals;
+    goto done;
+  done:
+    return result;
+}
+
+int
+rpc_write_select_result(int fd, struct column_ids *cids)
+{
+    assert(cids != NULL);
+
+    // materialize the ids
+    int result;
+    unsigned len = 0;
+    for (unsigned i = 0; i < bitmap_nbits(cids->cid_bitmap); i++) {
+        if (bitmap_isset(cids->cid_bitmap, i)) {
+            len++;
+        }
+    }
+
+    // Prepare the header and serialize the results
+    struct rpc_header msg;
+    msg.rpc_type = RPC_SELECT_RESULT;
+    msg.rpc_magic = RPC_HEADER_MAGIC;
+    msg.rpc_len = len * sizeof(unsigned);
+    TRY(result, rpc_write_header(fd, &msg), done);
+    for (unsigned i = 0; i < bitmap_nbits(cids->cid_bitmap); i++) {
+        if (bitmap_isset(cids->cid_bitmap, i)) {
+            uint32_t networkint = htonl((uint32_t) i);
+            TRY(result, io_write(fd, &networkint, sizeof(uint32_t)), done);
+        }
+    }
+
+    // success
+    result = 0;
+    goto done;
+  done:
+    return result;
+}
+
+// the retvals must be freed
+int
+rpc_read_select_result(int fd, struct rpc_header *msg,
+                       unsigned **retids, unsigned *retn)
+{
+    assert(retids != NULL);
+    assert(retn != NULL);
+    assert(msg != NULL);
+    assert(msg->rpc_type == RPC_SELECT_RESULT);
+    int result;
+
+    uint32_t bytes = msg->rpc_len;
+    assert(bytes % sizeof(unsigned) == 0);
+    unsigned *vals;
+    TRYNULL(result, DBENOMEM, vals, malloc(bytes), done);
+    unsigned nvals = bytes / (sizeof(unsigned));
+    for (unsigned i = 0; i < nvals; i++) {
+        int networkint;
+        TRY(result, io_read(fd, &networkint, sizeof(unsigned)), done);
+        vals[i] = ntohl(networkint);
+    }
+
+    // success
+    result = 0;
+    *retids = vals;
     *retn = nvals;
     goto done;
   done:

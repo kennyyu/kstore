@@ -492,6 +492,19 @@ void testcount(void) {
     parse_cleanup_ops(ops);
 }
 
+void testprint(void) {
+    char *query = "print(aout)";
+    struct oparray *ops = parse_query(query);
+    assert(oparray_num(ops) == 1);
+    struct op *op = oparray_get(ops, 0);
+    assert(op->op_type == OP_PRINT);
+    assert(strcmp(op->op_print.op_print_var,"aout") == 0);
+    char *s = op_string(op);
+    assert(strcmp(query, s) == 0);
+    free(s);
+    parse_cleanup_ops(ops);
+}
+
 void testbad(void) {
     char *query = "";
     struct oparray *ops = parse_query(query);
@@ -570,4 +583,5 @@ int main(void) {
     testmulassign();
     testdiv();
     testdivassign();
+    testprint();
 }

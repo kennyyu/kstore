@@ -290,21 +290,23 @@ server_eval_select(struct server_jobctx *jobctx, struct op *op)
     case OP_SELECT_ALL_ASSIGN:
     case OP_SELECT_RANGE_ASSIGN:
     case OP_SELECT_VALUE_ASSIGN:
-        break;
+        TRY(result, server_add_var(jobctx->sj_env, op->op_select.op_sel_var,
+                                   VAR_IDS, ids, NULL), cleanup_ids);
+        result = 0;
+        goto cleanup_col; // don't destroy ids
     case OP_SELECT_ALL:
     case OP_SELECT_RANGE:
     case OP_SELECT_VALUE:
-        goto cleanup_col;
+        TRY(result, rpc_write_select_result(jobctx->sj_fd, ids), cleanup_ids);
+        result = 0;
+        goto cleanup_ids; // destroy the ids
     default:
         assert(0);
         break;
     }
-    TRY(result, server_add_var(jobctx->sj_env, op->op_select.op_sel_var,
-                               VAR_IDS, ids, NULL), cleanup_col);
-    // success
-    result = 0;
-    goto cleanup_col;
 
+  cleanup_ids:
+    column_ids_destroy(ids);
   cleanup_col:
     column_close(col);
   done:
@@ -460,6 +462,37 @@ server_eval_math(struct server_jobctx *jobctx, struct op *op) {
 
 static
 int
+server_eval_print(struct server_jobctx *jobctx, struct op *op)
+{
+    assert(jobctx != NULL);
+    assert(op != NULL);
+    assert(op->op_type == OP_PRINT);
+
+    int result;
+    struct vartuple *v;
+    TRYNULL(result, DBENOVAR, v,
+            server_eval_get_var(jobctx->sj_env, op->op_print.op_print_var),
+            done);
+    switch (v->vt_type) {
+    case VAR_VALS:
+        TRY(result, rpc_write_fetch_result(jobctx->sj_fd, v->vt_column_vals), done);
+        break;
+    case VAR_IDS:
+        TRY(result, rpc_write_select_result(jobctx->sj_fd, v->vt_column_ids), done);
+        break;
+    default:
+        assert(0);
+        break;
+    }
+
+    result = 0;
+    goto done;
+  done:
+    return result;
+}
+
+static
+int
 server_eval_insert(struct server_jobctx *jobctx, struct op *op)
 {
     assert(jobctx != NULL);
@@ -574,6 +607,8 @@ server_eval(struct server_jobctx *jobctx, struct op *op)
         return server_eval_agg(jobctx, op);
     case OP_MATH:
         return server_eval_math(jobctx, op);
+    case OP_PRINT:
+        return server_eval_print(jobctx, op);
     default:
         assert(0);
         return -1;
