@@ -22,6 +22,7 @@
 #include "src/common/include/dberror.h"
 #include "src/common/include/try.h"
 #include "src/server/include/storage.h"
+#include "src/server/include/aggregate.h"
 
 #define PORT 5000
 #define BACKLOG 16
@@ -366,6 +367,50 @@ server_eval_fetch(struct server_jobctx *jobctx, struct op *op)
 
 static
 int
+server_eval_agg(struct server_jobctx *jobctx, struct op *op) {
+    assert(jobctx != NULL);
+    assert(op != NULL);
+    assert(op->op_type == OP_AGG);
+
+    int result;
+
+    // Try to find the column intermediate
+    struct vartuple *v;
+    TRYNULL(result, DBENOVAR, v,
+            server_eval_get_var(jobctx->sj_env, op->op_agg.op_agg_col),
+            done);
+    if (v->vt_type != VAR_VALS) {
+        result = DBEVARTYPE;
+        DBLOG(result);
+        goto done;
+    }
+
+    // Perform the aggregation
+    agg_func_t aggf = agg_func(op->op_agg.op_agg_atype);
+    struct column_vals *aggval;
+    TRY(result, column_agg(v->vt_column_vals, aggf, &aggval), done);
+    assert(aggval != NULL);
+
+    // If this is an assignment, add it to the environment
+    if (op->op_agg.op_agg_assign) {
+        TRY(result, server_add_var(jobctx->sj_env, op->op_agg.op_agg_var,
+                                   VAR_VALS, NULL, aggval), cleanup_aggval);
+        result = 0;
+        goto done; // don't destroy aggval
+    } else {
+        TRY(result, rpc_write_fetch_result(jobctx->sj_fd, aggval), cleanup_aggval);
+        result = 0;
+        goto cleanup_aggval; // destroy the intermediate
+    }
+
+  cleanup_aggval:
+    column_vals_destroy(aggval);
+  done:
+    return result;
+}
+
+static
+int
 server_eval_insert(struct server_jobctx *jobctx, struct op *op)
 {
     assert(jobctx != NULL);
@@ -476,6 +521,8 @@ server_eval(struct server_jobctx *jobctx, struct op *op)
         return server_eval_insert(jobctx, op);
     case OP_TUPLE:
         return server_eval_tuple(jobctx, op);
+    case OP_AGG:
+        return server_eval_agg(jobctx, op);
     default:
         assert(0);
         return -1;

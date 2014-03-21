@@ -35,6 +35,7 @@ dberror_string(enum dberror result)
     case DBECOLSELECT: return "column select error";
     case DBECOLFETCH: return "column fetch error";
     case DBECLIENTTERM: return "client terminated connection";
+    case DBEAGG: return "aggregation error";
     default:
         assert(0);
         return NULL;

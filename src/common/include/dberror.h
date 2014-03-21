@@ -31,6 +31,7 @@ enum dberror {
     DBECOLSELECT,
     DBECOLFETCH,
     DBECLIENTTERM,
+    DBEAGG,
 };
 
 const char *dberror_string(enum dberror result);
