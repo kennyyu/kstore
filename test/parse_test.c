@@ -205,6 +205,293 @@ void testtuple(void) {
     parse_cleanup_ops(ops);
 }
 
+void testaddassign(void) {
+    char *query = "x=add(aout,bout)";
+    struct oparray *ops = parse_query(query);
+    assert(oparray_num(ops) == 1);
+    struct op *op = oparray_get(ops, 0);
+    assert(op->op_type == OP_MATH);
+    assert(op->op_math.op_math_atype == MATH_ADD);
+    assert(strcmp(op->op_math.op_math_col1,"aout") == 0);
+    assert(strcmp(op->op_math.op_math_col2,"bout") == 0);
+    assert(op->op_math.op_math_assign == true);
+    assert(strcmp(op->op_math.op_math_var,"x") == 0);
+    char *s = op_string(op);
+    assert(strcmp(query, s) == 0);
+    free(s);
+    parse_cleanup_ops(ops);
+}
+
+void testadd(void) {
+    char *query = "add(aout,bout)";
+    struct oparray *ops = parse_query(query);
+    assert(oparray_num(ops) == 1);
+    struct op *op = oparray_get(ops, 0);
+    assert(op->op_type == OP_MATH);
+    assert(op->op_math.op_math_atype == MATH_ADD);
+    assert(strcmp(op->op_math.op_math_col1,"aout") == 0);
+    assert(strcmp(op->op_math.op_math_col2,"bout") == 0);
+    assert(op->op_math.op_math_assign == false);
+    char *s = op_string(op);
+    assert(strcmp(query, s) == 0);
+    free(s);
+    parse_cleanup_ops(ops);
+}
+
+void testsubassign(void) {
+    char *query = "x=sub(aout,bout)";
+    struct oparray *ops = parse_query(query);
+    assert(oparray_num(ops) == 1);
+    struct op *op = oparray_get(ops, 0);
+    assert(op->op_type == OP_MATH);
+    assert(op->op_math.op_math_atype == MATH_SUB);
+    assert(strcmp(op->op_math.op_math_col1,"aout") == 0);
+    assert(strcmp(op->op_math.op_math_col2,"bout") == 0);
+    assert(op->op_math.op_math_assign == true);
+    assert(strcmp(op->op_math.op_math_var,"x") == 0);
+    char *s = op_string(op);
+    assert(strcmp(query, s) == 0);
+    free(s);
+    parse_cleanup_ops(ops);
+}
+
+void testsub(void) {
+    char *query = "sub(aout,bout)";
+    struct oparray *ops = parse_query(query);
+    assert(oparray_num(ops) == 1);
+    struct op *op = oparray_get(ops, 0);
+    assert(op->op_type == OP_MATH);
+    assert(op->op_math.op_math_atype == MATH_SUB);
+    assert(strcmp(op->op_math.op_math_col1,"aout") == 0);
+    assert(strcmp(op->op_math.op_math_col2,"bout") == 0);
+    assert(op->op_math.op_math_assign == false);
+    char *s = op_string(op);
+    assert(strcmp(query, s) == 0);
+    free(s);
+    parse_cleanup_ops(ops);
+}
+
+void testmulassign(void) {
+    char *query = "x=mul(aout,bout)";
+    struct oparray *ops = parse_query(query);
+    assert(oparray_num(ops) == 1);
+    struct op *op = oparray_get(ops, 0);
+    assert(op->op_type == OP_MATH);
+    assert(op->op_math.op_math_atype == MATH_MUL);
+    assert(strcmp(op->op_math.op_math_col1,"aout") == 0);
+    assert(strcmp(op->op_math.op_math_col2,"bout") == 0);
+    assert(op->op_math.op_math_assign == true);
+    assert(strcmp(op->op_math.op_math_var,"x") == 0);
+    char *s = op_string(op);
+    assert(strcmp(query, s) == 0);
+    free(s);
+    parse_cleanup_ops(ops);
+}
+
+void testmul(void) {
+    char *query = "mul(aout,bout)";
+    struct oparray *ops = parse_query(query);
+    assert(oparray_num(ops) == 1);
+    struct op *op = oparray_get(ops, 0);
+    assert(op->op_type == OP_MATH);
+    assert(op->op_math.op_math_atype == MATH_MUL);
+    assert(strcmp(op->op_math.op_math_col1,"aout") == 0);
+    assert(strcmp(op->op_math.op_math_col2,"bout") == 0);
+    assert(op->op_math.op_math_assign == false);
+    char *s = op_string(op);
+    assert(strcmp(query, s) == 0);
+    free(s);
+    parse_cleanup_ops(ops);
+}
+
+void testdivassign(void) {
+    char *query = "x=div(aout,bout)";
+    struct oparray *ops = parse_query(query);
+    assert(oparray_num(ops) == 1);
+    struct op *op = oparray_get(ops, 0);
+    assert(op->op_type == OP_MATH);
+    assert(op->op_math.op_math_atype == MATH_DIV);
+    assert(strcmp(op->op_math.op_math_col1,"aout") == 0);
+    assert(strcmp(op->op_math.op_math_col2,"bout") == 0);
+    assert(op->op_math.op_math_assign == true);
+    assert(strcmp(op->op_math.op_math_var,"x") == 0);
+    char *s = op_string(op);
+    assert(strcmp(query, s) == 0);
+    free(s);
+    parse_cleanup_ops(ops);
+}
+
+void testdiv(void) {
+    char *query = "div(aout,bout)";
+    struct oparray *ops = parse_query(query);
+    assert(oparray_num(ops) == 1);
+    struct op *op = oparray_get(ops, 0);
+    assert(op->op_type == OP_MATH);
+    assert(op->op_math.op_math_atype == MATH_DIV);
+    assert(strcmp(op->op_math.op_math_col1,"aout") == 0);
+    assert(strcmp(op->op_math.op_math_col2,"bout") == 0);
+    assert(op->op_math.op_math_assign == false);
+    char *s = op_string(op);
+    assert(strcmp(query, s) == 0);
+    free(s);
+    parse_cleanup_ops(ops);
+}
+
+void testminassign(void) {
+    char *query = "x=min(aout)";
+    struct oparray *ops = parse_query(query);
+    assert(oparray_num(ops) == 1);
+    struct op *op = oparray_get(ops, 0);
+    assert(op->op_type == OP_AGG);
+    assert(op->op_agg.op_agg_atype == AGG_MIN);
+    assert(strcmp(op->op_agg.op_agg_col,"aout") == 0);
+    assert(op->op_agg.op_agg_assign == true);
+    assert(strcmp(op->op_agg.op_agg_var,"x") == 0);
+    char *s = op_string(op);
+    assert(strcmp(query, s) == 0);
+    free(s);
+    parse_cleanup_ops(ops);
+}
+
+void testmin(void) {
+    char *query = "min(aout)";
+    struct oparray *ops = parse_query(query);
+    assert(oparray_num(ops) == 1);
+    struct op *op = oparray_get(ops, 0);
+    assert(op->op_type == OP_AGG);
+    assert(op->op_agg.op_agg_atype == AGG_MIN);
+    assert(strcmp(op->op_agg.op_agg_col,"aout") == 0);
+    assert(op->op_agg.op_agg_assign == false);
+    char *s = op_string(op);
+    assert(strcmp(query, s) == 0);
+    free(s);
+    parse_cleanup_ops(ops);
+}
+
+void testmaxassign(void) {
+    char *query = "x=max(aout)";
+    struct oparray *ops = parse_query(query);
+    assert(oparray_num(ops) == 1);
+    struct op *op = oparray_get(ops, 0);
+    assert(op->op_type == OP_AGG);
+    assert(op->op_agg.op_agg_atype == AGG_MAX);
+    assert(strcmp(op->op_agg.op_agg_col,"aout") == 0);
+    assert(op->op_agg.op_agg_assign == true);
+    assert(strcmp(op->op_agg.op_agg_var,"x") == 0);
+    char *s = op_string(op);
+    assert(strcmp(query, s) == 0);
+    free(s);
+    parse_cleanup_ops(ops);
+}
+
+void testmax(void) {
+    char *query = "max(aout)";
+    struct oparray *ops = parse_query(query);
+    assert(oparray_num(ops) == 1);
+    struct op *op = oparray_get(ops, 0);
+    assert(op->op_type == OP_AGG);
+    assert(op->op_agg.op_agg_atype == AGG_MAX);
+    assert(strcmp(op->op_agg.op_agg_col,"aout") == 0);
+    assert(op->op_agg.op_agg_assign == false);
+    char *s = op_string(op);
+    assert(strcmp(query, s) == 0);
+    free(s);
+    parse_cleanup_ops(ops);
+}
+
+void testavgassign(void) {
+    char *query = "x=avg(aout)";
+    struct oparray *ops = parse_query(query);
+    assert(oparray_num(ops) == 1);
+    struct op *op = oparray_get(ops, 0);
+    assert(op->op_type == OP_AGG);
+    assert(op->op_agg.op_agg_atype == AGG_AVG);
+    assert(strcmp(op->op_agg.op_agg_col,"aout") == 0);
+    assert(op->op_agg.op_agg_assign == true);
+    assert(strcmp(op->op_agg.op_agg_var,"x") == 0);
+    char *s = op_string(op);
+    assert(strcmp(query, s) == 0);
+    free(s);
+    parse_cleanup_ops(ops);
+}
+
+void testavg(void) {
+    char *query = "avg(aout)";
+    struct oparray *ops = parse_query(query);
+    assert(oparray_num(ops) == 1);
+    struct op *op = oparray_get(ops, 0);
+    assert(op->op_type == OP_AGG);
+    assert(op->op_agg.op_agg_atype == AGG_AVG);
+    assert(strcmp(op->op_agg.op_agg_col,"aout") == 0);
+    assert(op->op_agg.op_agg_assign == false);
+    char *s = op_string(op);
+    assert(strcmp(query, s) == 0);
+    free(s);
+    parse_cleanup_ops(ops);
+}
+
+void testsumassign(void) {
+    char *query = "x=sum(aout)";
+    struct oparray *ops = parse_query(query);
+    assert(oparray_num(ops) == 1);
+    struct op *op = oparray_get(ops, 0);
+    assert(op->op_type == OP_AGG);
+    assert(op->op_agg.op_agg_atype == AGG_SUM);
+    assert(strcmp(op->op_agg.op_agg_col,"aout") == 0);
+    assert(op->op_agg.op_agg_assign == true);
+    assert(strcmp(op->op_agg.op_agg_var,"x") == 0);
+    char *s = op_string(op);
+    assert(strcmp(query, s) == 0);
+    free(s);
+    parse_cleanup_ops(ops);
+}
+
+void testsum(void) {
+    char *query = "sum(aout)";
+    struct oparray *ops = parse_query(query);
+    assert(oparray_num(ops) == 1);
+    struct op *op = oparray_get(ops, 0);
+    assert(op->op_type == OP_AGG);
+    assert(op->op_agg.op_agg_atype == AGG_SUM);
+    assert(strcmp(op->op_agg.op_agg_col,"aout") == 0);
+    assert(op->op_agg.op_agg_assign == false);
+    char *s = op_string(op);
+    assert(strcmp(query, s) == 0);
+    free(s);
+    parse_cleanup_ops(ops);
+}
+
+void testcountassign(void) {
+    char *query = "x=count(aout)";
+    struct oparray *ops = parse_query(query);
+    assert(oparray_num(ops) == 1);
+    struct op *op = oparray_get(ops, 0);
+    assert(op->op_type == OP_AGG);
+    assert(op->op_agg.op_agg_atype == AGG_COUNT);
+    assert(strcmp(op->op_agg.op_agg_col,"aout") == 0);
+    assert(op->op_agg.op_agg_assign == true);
+    assert(strcmp(op->op_agg.op_agg_var,"x") == 0);
+    char *s = op_string(op);
+    assert(strcmp(query, s) == 0);
+    free(s);
+    parse_cleanup_ops(ops);
+}
+
+void testcount(void) {
+    char *query = "count(aout)";
+    struct oparray *ops = parse_query(query);
+    assert(oparray_num(ops) == 1);
+    struct op *op = oparray_get(ops, 0);
+    assert(op->op_type == OP_AGG);
+    assert(op->op_agg.op_agg_atype == AGG_COUNT);
+    assert(strcmp(op->op_agg.op_agg_col,"aout") == 0);
+    assert(op->op_agg.op_agg_assign == false);
+    char *s = op_string(op);
+    assert(strcmp(query, s) == 0);
+    free(s);
+    parse_cleanup_ops(ops);
+}
+
 void testbad(void) {
     char *query = "";
     struct oparray *ops = parse_query(query);
@@ -265,4 +552,22 @@ int main(void) {
     testinsert();
     testtuple();
     testmultiple();
+    testmin();
+    testminassign();
+    testmax();
+    testmaxassign();
+    testsum();
+    testsumassign();
+    testcount();
+    testcountassign();
+    testavg();
+    testavgassign();
+    testadd();
+    testaddassign();
+    testsub();
+    testsubassign();
+    testmul();
+    testmulassign();
+    testdiv();
+    testdivassign();
 }

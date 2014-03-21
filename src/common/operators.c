@@ -7,21 +7,6 @@
 #include "include/dberror.h"
 #include "include/operators.h"
 
-char *op_type_string(enum op_type op_type) {
-    switch (op_type) {
-    case OP_SELECT_ALL_ASSIGN: return "OP_SELECT_ALL_ASSIGN";
-    case OP_SELECT_RANGE_ASSIGN: return "OP_SELECT_RANGE_ASSIGN";
-    case OP_SELECT_VALUE_ASSIGN: return "OP_SELECT_VALUE_ASSIGN";
-    case OP_SELECT_ALL: return "OP_SELECT_ALL";
-    case OP_SELECT_RANGE: return "OP_SELECT_RANGE";
-    case OP_SELECT_VALUE: return "OP_SELECT_VALUE";
-    case OP_FETCH: return "OP_FETCH";
-    case OP_CREATE: return "OP_CREATE";
-    case OP_LOAD: return "OP_LOAD";
-    case OP_INSERT: return "OP_INSERT";
-    default: assert(0); return NULL;
-    }
-}
 char *op_string(struct op *op) {
     int result;
     char *stype;
@@ -93,6 +78,32 @@ char *op_string(struct op *op) {
         sprintf(buf, "tuple(%s)",
                 op->op_tuple.op_tuple_vars);
         break;
+    case OP_AGG:
+        if (op->op_agg.op_agg_assign) {
+            sprintf(buf, "%s=%s(%s)",
+                    op->op_agg.op_agg_var,
+                    agg_type_string(op->op_agg.op_agg_atype),
+                    op->op_agg.op_agg_col);
+        } else {
+            sprintf(buf, "%s(%s)",
+                    agg_type_string(op->op_agg.op_agg_atype),
+                    op->op_agg.op_agg_col);
+        }
+        break;
+    case OP_MATH:
+        if (op->op_math.op_math_assign) {
+            sprintf(buf, "%s=%s(%s,%s)",
+                    op->op_math.op_math_var,
+                    math_type_string(op->op_math.op_math_atype),
+                    op->op_math.op_math_col1,
+                    op->op_math.op_math_col2);
+        } else {
+            sprintf(buf, "%s(%s,%s)",
+                    math_type_string(op->op_math.op_math_atype),
+                    op->op_math.op_math_col1,
+                    op->op_math.op_math_col2);
+        }
+        break;
     default: assert(0); return NULL;
     }
 
@@ -119,6 +130,27 @@ char *storage_type_string(enum storage_type stype) {
     case STORAGE_UNSORTED: return "unsorted";
     case STORAGE_SORTED: return "sorted";
     case STORAGE_BTREE: return "b+tree";
+    default: assert(0); return NULL;
+    }
+}
+
+char *math_type_string(enum math_type mtype) {
+    switch (mtype) {
+    case MATH_ADD: return "add";
+    case MATH_SUB: return "sub";
+    case MATH_MUL: return "mul";
+    case MATH_DIV: return "div";
+    default: assert(0); return NULL;
+    }
+}
+
+char *agg_type_string(enum agg_type atype) {
+    switch (atype) {
+    case AGG_MIN: return "min";
+    case AGG_MAX: return "max";
+    case AGG_SUM: return "sum";
+    case AGG_AVG: return "avg";
+    case AGG_COUNT: return "count";
     default: assert(0); return NULL;
     }
 }

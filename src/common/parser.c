@@ -1,5 +1,6 @@
 #include <assert.h>
 #include <errno.h>
+#include <stdbool.h>
 #include <stdlib.h>
 #include <stddef.h>
 #include <stdio.h>
@@ -165,6 +166,167 @@ parse_line(char *line)
     if (sscanf(line, "tuple(%[^)])",
         (char *) &op->op_tuple.op_tuple_vars) == 1) {
         op->op_type = OP_TUPLE;
+        goto done;
+    }
+    bzero(op, sizeof(struct op));
+    if (sscanf(line, "%[^=]=add(%[^,],%[^)])",
+        (char *) &op->op_math.op_math_var,
+        (char *) &op->op_math.op_math_col1,
+        (char *) &op->op_math.op_math_col2) == 3) {
+        op->op_type = OP_MATH;
+        op->op_math.op_math_atype = MATH_ADD;
+        op->op_math.op_math_assign = true;
+        goto done;
+    }
+    bzero(op, sizeof(struct op));
+    if (sscanf(line, "add(%[^,],%[^)])",
+        (char *) &op->op_math.op_math_col1,
+        (char *) &op->op_math.op_math_col2) == 2) {
+        op->op_type = OP_MATH;
+        op->op_math.op_math_atype = MATH_ADD;
+        op->op_math.op_math_assign = false;
+        goto done;
+    }
+    bzero(op, sizeof(struct op));
+    if (sscanf(line, "%[^=]=sub(%[^,],%[^)])",
+        (char *) &op->op_math.op_math_var,
+        (char *) &op->op_math.op_math_col1,
+        (char *) &op->op_math.op_math_col2) == 3) {
+        op->op_type = OP_MATH;
+        op->op_math.op_math_atype = MATH_SUB;
+        op->op_math.op_math_assign = true;
+        goto done;
+    }
+    bzero(op, sizeof(struct op));
+    if (sscanf(line, "sub(%[^,],%[^)])",
+        (char *) &op->op_math.op_math_col1,
+        (char *) &op->op_math.op_math_col2) == 2) {
+        op->op_type = OP_MATH;
+        op->op_math.op_math_atype = MATH_SUB;
+        op->op_math.op_math_assign = false;
+        goto done;
+    }
+    bzero(op, sizeof(struct op));
+    if (sscanf(line, "%[^=]=mul(%[^,],%[^)])",
+        (char *) &op->op_math.op_math_var,
+        (char *) &op->op_math.op_math_col1,
+        (char *) &op->op_math.op_math_col2) == 3) {
+        op->op_type = OP_MATH;
+        op->op_math.op_math_atype = MATH_MUL;
+        op->op_math.op_math_assign = true;
+        goto done;
+    }
+    bzero(op, sizeof(struct op));
+    if (sscanf(line, "mul(%[^,],%[^)])",
+        (char *) &op->op_math.op_math_col1,
+        (char *) &op->op_math.op_math_col2) == 2) {
+        op->op_type = OP_MATH;
+        op->op_math.op_math_atype = MATH_MUL;
+        op->op_math.op_math_assign = false;
+        goto done;
+    }
+    bzero(op, sizeof(struct op));
+    if (sscanf(line, "%[^=]=div(%[^,],%[^)])",
+        (char *) &op->op_math.op_math_var,
+        (char *) &op->op_math.op_math_col1,
+        (char *) &op->op_math.op_math_col2) == 3) {
+        op->op_type = OP_MATH;
+        op->op_math.op_math_atype = MATH_DIV;
+        op->op_math.op_math_assign = true;
+        goto done;
+    }
+    bzero(op, sizeof(struct op));
+    if (sscanf(line, "div(%[^,],%[^)])",
+        (char *) &op->op_math.op_math_col1,
+        (char *) &op->op_math.op_math_col2) == 2) {
+        op->op_type = OP_MATH;
+        op->op_math.op_math_atype = MATH_DIV;
+        op->op_math.op_math_assign = false;
+        goto done;
+    }
+    bzero(op, sizeof(struct op));
+    if (sscanf(line, "%[^=]=min(%[^,)])",
+        (char *) &op->op_agg.op_agg_var,
+        (char *) &op->op_agg.op_agg_col) == 2) {
+        op->op_type = OP_AGG;
+        op->op_agg.op_agg_atype = AGG_MIN;
+        op->op_agg.op_agg_assign = true;
+        goto done;
+    }
+    bzero(op, sizeof(struct op));
+    if (sscanf(line, "min(%[^,)])",
+        (char *) &op->op_agg.op_agg_col) == 1) {
+        op->op_type = OP_AGG;
+        op->op_agg.op_agg_atype = AGG_MIN;
+        op->op_agg.op_agg_assign = false;
+        goto done;
+    }
+    bzero(op, sizeof(struct op));
+    if (sscanf(line, "%[^=]=max(%[^,)])",
+        (char *) &op->op_agg.op_agg_var,
+        (char *) &op->op_agg.op_agg_col) == 2) {
+        op->op_type = OP_AGG;
+        op->op_agg.op_agg_atype = AGG_MAX;
+        op->op_agg.op_agg_assign = true;
+        goto done;
+    }
+    bzero(op, sizeof(struct op));
+    if (sscanf(line, "max(%[^,)])",
+        (char *) &op->op_agg.op_agg_col) == 1) {
+        op->op_type = OP_AGG;
+        op->op_agg.op_agg_atype = AGG_MAX;
+        op->op_agg.op_agg_assign = false;
+        goto done;
+    }
+    bzero(op, sizeof(struct op));
+    if (sscanf(line, "%[^=]=avg(%[^,)])",
+        (char *) &op->op_agg.op_agg_var,
+        (char *) &op->op_agg.op_agg_col) == 2) {
+        op->op_type = OP_AGG;
+        op->op_agg.op_agg_atype = AGG_AVG;
+        op->op_agg.op_agg_assign = true;
+        goto done;
+    }
+    bzero(op, sizeof(struct op));
+    if (sscanf(line, "avg(%[^,)])",
+        (char *) &op->op_agg.op_agg_col) == 1) {
+        op->op_type = OP_AGG;
+        op->op_agg.op_agg_atype = AGG_AVG;
+        op->op_agg.op_agg_assign = false;
+        goto done;
+    }
+    bzero(op, sizeof(struct op));
+    if (sscanf(line, "%[^=]=sum(%[^,)])",
+        (char *) &op->op_agg.op_agg_var,
+        (char *) &op->op_agg.op_agg_col) == 2) {
+        op->op_type = OP_AGG;
+        op->op_agg.op_agg_atype = AGG_SUM;
+        op->op_agg.op_agg_assign = true;
+        goto done;
+    }
+    bzero(op, sizeof(struct op));
+    if (sscanf(line, "sum(%[^,)])",
+        (char *) &op->op_agg.op_agg_col) == 1) {
+        op->op_type = OP_AGG;
+        op->op_agg.op_agg_atype = AGG_SUM;
+        op->op_agg.op_agg_assign = false;
+        goto done;
+    }
+    bzero(op, sizeof(struct op));
+    if (sscanf(line, "%[^=]=count(%[^,)])",
+        (char *) &op->op_agg.op_agg_var,
+        (char *) &op->op_agg.op_agg_col) == 2) {
+        op->op_type = OP_AGG;
+        op->op_agg.op_agg_atype = AGG_COUNT;
+        op->op_agg.op_agg_assign = true;
+        goto done;
+    }
+    bzero(op, sizeof(struct op));
+    if (sscanf(line, "count(%[^,)])",
+        (char *) &op->op_agg.op_agg_col) == 1) {
+        op->op_type = OP_AGG;
+        op->op_agg.op_agg_atype = AGG_COUNT;
+        op->op_agg.op_agg_assign = false;
         goto done;
     }
     goto cleanup_op;
