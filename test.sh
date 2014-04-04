@@ -19,7 +19,7 @@ do
     expected="$testdir/$base.expected"
     mine="$TMP/$base.me"
     difffile="$TMP/$base.diff"
-    ./client < $t > $mine
+    ./client --loaddir $testdir < $t > $mine
     results=`diff $expected $mine`
     if [ -z "$results" ]
     then
