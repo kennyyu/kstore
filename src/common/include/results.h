@@ -4,6 +4,9 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include "bitmap.h"
+#include "array.h"
+
+DECLARRAY_BYTYPE(idarray, unsigned);
 
 enum column_ids_type {
     CID_BITMAP,
@@ -14,10 +17,7 @@ struct column_ids {
     enum column_ids_type cid_type;
     union {
         struct bitmap *cid_bitmap;
-        struct {
-            unsigned *cid_ids;
-            unsigned cid_len;
-        };
+        struct idarray *cid_array;
     };
 };
 

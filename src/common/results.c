@@ -5,6 +5,9 @@
 #include <stdbool.h>
 #include "include/bitmap.h"
 #include "include/results.h"
+#include "include/array.h"
+
+DEFARRAY_BYTYPE(idarray, unsigned, /* no inline */);
 
 void
 column_ids_destroy(struct column_ids *cids)
@@ -15,7 +18,8 @@ column_ids_destroy(struct column_ids *cids)
         bitmap_destroy(cids->cid_bitmap);
         break;
     case CID_ARRAY:
-        free(cids->cid_ids);
+        cids->cid_array->arr.num = 0;
+        idarray_destroy(cids->cid_array);
         break;
     default: assert(0); break;
     }
@@ -55,7 +59,7 @@ cid_iter_has_next(struct cid_iterator *iter)
         return false;
     case CID_ARRAY:
         // We still have a next element as long as we're less than the bound
-        return (iter->ciditer_i < iter->ciditer_ids->cid_len);
+        return (iter->ciditer_i < idarray_num(iter->ciditer_ids->cid_array));
     default: assert(0); return false;
     }
 }
@@ -70,7 +74,7 @@ cid_iter_get(struct cid_iterator *iter)
         id = iter->ciditer_i;
         break;
     case CID_ARRAY:
-        id = iter->ciditer_ids->cid_ids[iter->ciditer_i];
+        id = (unsigned) idarray_get(iter->ciditer_ids->cid_array, iter->ciditer_i);
         break;
     default: assert(0); break;
     }

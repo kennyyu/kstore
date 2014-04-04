@@ -319,7 +319,7 @@ rpc_write_select_result(int fd, struct column_ids *cids)
         }
         break;
     case CID_ARRAY:
-        len = cids->cid_len;
+        len = idarray_num(cids->cid_array);
         break;
     }
 

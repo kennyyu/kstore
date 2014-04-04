@@ -1114,6 +1114,7 @@ column_fetch_base_data(struct column *col, struct column_ids *ids,
     struct column_entry_unsorted colentrybuf[COLENTRY_UNSORTED_PER_PAGE];
     while (cid_iter_has_next(&iter)) {
         uint64_t i = cid_iter_get(&iter);
+        assert(i < col->col_disk.cd_ntuples);
         page_t requestedpage =
                 FILE_FIRST_PAGE + (i / COLENTRY_UNSORTED_PER_PAGE);
         assert(requestedpage != 0);
@@ -1145,20 +1146,17 @@ column_fetch(struct column *col, struct column_ids *ids)
 
     rwlock_acquire_read(col->col_rwlock);
     uint64_t ntuples = col->col_disk.cd_ntuples;
-    uint64_t actualtuples;
     switch (ids->cid_type) {
     case CID_BITMAP:
-        actualtuples = bitmap_nbits(ids->cid_bitmap);
+        if (ntuples != bitmap_nbits(ids->cid_bitmap)) {
+            result = DBECOLDIFFLEN;
+            DBLOG(result);
+            goto done;
+        }
         break;
     case CID_ARRAY:
-        actualtuples = ids->cid_len;
         break;
     default: assert(0); break;
-    }
-    if (ntuples != actualtuples) {
-        result = DBECOLDIFFLEN;
-        DBLOG(result);
-        goto done;
     }
 
     struct valarray *vals;
