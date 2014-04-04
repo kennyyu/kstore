@@ -30,6 +30,7 @@ void
 column_vals_destroy(struct column_vals *vals)
 {
     assert(vals != NULL);
+    free(vals->cval_ids);
     free(vals->cval_vals);
     free(vals);
 }

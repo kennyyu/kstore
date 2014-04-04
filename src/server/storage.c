@@ -1104,7 +1104,7 @@ column_select(struct column *col, struct op *op)
 static
 int
 column_fetch_base_data(struct column *col, struct column_ids *ids,
-                       struct valarray *vals)
+                       struct valarray *vals, struct idarray *fetchids)
 {
     int result;
     struct cid_iterator iter;
@@ -1127,6 +1127,7 @@ column_fetch_base_data(struct column *col, struct column_ids *ids,
         unsigned requestedindex = i % COLENTRY_UNSORTED_PER_PAGE;
         int val = colentrybuf[requestedindex].ce_val;
         TRY(result, valarray_add(vals, (void *) val, NULL), done);
+        TRY(result, idarray_add(fetchids, (void *) (unsigned) i, NULL), done);
     }
     // success
     result = 0;
@@ -1162,12 +1163,16 @@ column_fetch(struct column *col, struct column_ids *ids)
     struct valarray *vals;
     TRYNULL(result, DBENOMEM, vals, valarray_create(), done);
 
+    // TODO copy ids
+    struct idarray *fetchids;
+    TRYNULL(result, DBENOMEM, fetchids, idarray_create(), cleanup_vals);
+
     switch (col->col_disk.cd_stype) {
     case STORAGE_UNSORTED:
     case STORAGE_SORTED:
     case STORAGE_BTREE:
         // we always use the base data to fetch the values
-        result = column_fetch_base_data(col, ids, vals);
+        result = column_fetch_base_data(col, ids, vals, fetchids);
         break;
     default:
         assert(0);
@@ -1175,22 +1180,33 @@ column_fetch(struct column *col, struct column_ids *ids)
     }
     if (result) {
         DBLOG(result);
-        goto cleanup_vals;
+        goto cleanup_fetchids;
     }
+    assert(valarray_num(vals) == idarray_num(fetchids));
 
     // memcpy the results from the resizable array into the pointer in this
     // struct column_vals
-    TRYNULL(result, DBENOMEM, cvals, malloc(sizeof(struct column_vals)), cleanup_vals);
+    TRYNULL(result, DBENOMEM, cvals, malloc(sizeof(struct column_vals)), cleanup_fetchids);
+    bzero(cvals, sizeof(struct column_vals));
     cvals->cval_len = valarray_num(vals);
     TRYNULL(result, DBENOMEM, cvals->cval_vals,
             malloc(sizeof(int) * cvals->cval_len), cleanup_malloc);
     memcpy(cvals->cval_vals, vals->arr.v, sizeof(int) * cvals->cval_len);
+    TRYNULL(result, DBENOMEM, cvals->cval_ids,
+            malloc(sizeof(unsigned) * cvals->cval_len), cleanup_vals_malloc);
+    memcpy(cvals->cval_ids, fetchids->arr.v, sizeof(unsigned) * cvals->cval_len);
+    strcpy(cvals->cval_col, col->col_disk.cd_col_name);
     result = 0;
-    goto cleanup_vals;
+    goto cleanup_fetchids;
 
+  cleanup_vals_malloc:
+    free(cvals->cval_vals);
   cleanup_malloc:
     free(cvals);
     cvals = NULL;
+  cleanup_fetchids:
+    fetchids->arr.num = 0;
+    idarray_destroy(fetchids);
   cleanup_vals:
     // no need to free the values because they're just ints
     vals->arr.num = 0;

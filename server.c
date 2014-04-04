@@ -344,8 +344,6 @@ server_eval_fetch(struct server_jobctx *jobctx, struct op *op)
     switch (op->op_type) {
     case OP_FETCH:
         // now write the results back to the client
-        // sort the values before returning
-        qsort(vals->cval_vals, vals->cval_len, sizeof(int), int_compare);
         TRY(result, rpc_write_fetch_result(jobctx->sj_fd, vals), cleanup_vals);
         break;
     case OP_FETCH_ASSIGN:
@@ -449,7 +447,6 @@ server_eval_math(struct server_jobctx *jobctx, struct op *op) {
         result = 0;
         goto done; // don't destroy vals
     } else {
-        qsort(mathvals->cval_vals, mathvals->cval_len, sizeof(int), int_compare);
         TRY(result, rpc_write_fetch_result(jobctx->sj_fd, mathvals), cleanup_mathval);
         result = 0;
         goto cleanup_mathval; // destroy the intermediate

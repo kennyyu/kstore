@@ -5,6 +5,7 @@
 #include <stdbool.h>
 #include "bitmap.h"
 #include "array.h"
+#include "operators.h"
 
 DECLARRAY_BYTYPE(idarray, unsigned);
 
@@ -33,7 +34,9 @@ void cid_iter_cleanup(struct cid_iterator *iter);
 
 struct column_vals {
     int *cval_vals;
+    unsigned *cval_ids;
     unsigned cval_len;
+    char cval_col[COLUMNLEN]; // column that this was fetched from
 };
 
 void column_ids_destroy(struct column_ids *cids);

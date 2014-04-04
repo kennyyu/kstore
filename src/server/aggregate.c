@@ -1,6 +1,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <limits.h>
+#include <string.h>
 #include "include/aggregate.h"
 #include "../common/include/operators.h"
 #include "../common/include/try.h"
@@ -18,6 +19,7 @@ column_agg(struct column_vals *vals,
     int result;
     struct column_vals *aggval = NULL;
     TRYNULL(result, DBENOMEM, aggval, malloc(sizeof(struct column_vals)), done);
+    bzero(aggval, sizeof(struct column_vals));
     TRYNULL(result, DBENOMEM, aggval->cval_vals, malloc(sizeof(int) * 1), cleanup_val);
     aggval->cval_len = 1;
     aggval->cval_vals[0] = agg;
@@ -111,6 +113,7 @@ column_math(struct column_vals *valsleft,
     // Now compute the math result
     struct column_vals *mathvals;
     TRYNULL(result, DBENOMEM, mathvals, malloc(sizeof(struct column_vals)), done);
+    bzero(mathvals, sizeof(struct column_vals));
     TRYNULL(result, DBENOMEM, mathvals->cval_vals,
             malloc(sizeof(int) * valsleft->cval_len), cleanup_vals);
     mathvals->cval_len = valsleft->cval_len;
