@@ -1100,11 +1100,50 @@ column_select(struct column *col, struct op *op)
     return cids;
 }
 
+struct fetch_tuple {
+    unsigned fetch_index;
+    unsigned fetch_id;
+    int fetch_val;
+};
+
+static
+int
+fetch_tuple_compare_index(const void *a, const void *b)
+{
+    struct fetch_tuple *ap = (struct fetch_tuple *) a;
+    struct fetch_tuple *bp = (struct fetch_tuple *) b;
+    return (int) (ap->fetch_index - bp->fetch_index);
+}
+
+static
+int
+fetch_tuple_compare_id(const void *a, const void *b)
+{
+    struct fetch_tuple *ap = (struct fetch_tuple *) a;
+    struct fetch_tuple *bp = (struct fetch_tuple *) b;
+    return (int) (ap->fetch_id - bp->fetch_id);
+}
+
+static
+void
+fetch_tuples_sort_index(struct fetch_tuple *tuples, unsigned len)
+{
+    qsort(tuples, len, sizeof(struct fetch_tuple), fetch_tuple_compare_index);
+}
+
+static
+void
+fetch_tuples_sort_id(struct fetch_tuple *tuples, unsigned len)
+{
+    qsort(tuples, len, sizeof(struct fetch_tuple), fetch_tuple_compare_id);
+}
+
 // PRECONDITION: MUST BE HOLDING LOCK ON COLUMN
 static
 int
 column_fetch_base_data(struct column *col, struct column_ids *ids,
-                       struct valarray *vals, struct idarray *fetchids)
+                       struct valarray *vals, struct idarray *fetchids,
+                       struct fetch_tuple *ftuples)
 {
     int result;
     struct cid_iterator iter;
@@ -1112,6 +1151,7 @@ column_fetch_base_data(struct column *col, struct column_ids *ids,
 
     page_t curpage = 0;
     struct column_entry_unsorted colentrybuf[COLENTRY_UNSORTED_PER_PAGE];
+    unsigned ni = 0;
     while (cid_iter_has_next(&iter)) {
         uint64_t i = cid_iter_get(&iter);
         assert(i < col->col_disk.cd_ntuples);
@@ -1126,8 +1166,14 @@ column_fetch_base_data(struct column *col, struct column_ids *ids,
         }
         unsigned requestedindex = i % COLENTRY_UNSORTED_PER_PAGE;
         int val = colentrybuf[requestedindex].ce_val;
-        TRY(result, valarray_add(vals, (void *) val, NULL), done);
-        TRY(result, idarray_add(fetchids, (void *) (unsigned) i, NULL), done);
+        if (ids->cid_type == CID_BITMAP) {
+            TRY(result, valarray_add(vals, (void *) val, NULL), done);
+            TRY(result, idarray_add(fetchids, (void *) (unsigned) i, NULL), done);
+        } else {
+            assert(ftuples[ni].fetch_id == i);
+            ftuples[ni].fetch_val = val;
+            ni++;
+        }
     }
     // success
     result = 0;
@@ -1160,57 +1206,86 @@ column_fetch(struct column *col, struct column_ids *ids)
     default: assert(0); break;
     }
 
-    struct valarray *vals;
-    TRYNULL(result, DBENOMEM, vals, valarray_create(), done);
+    struct fetch_tuple *ftuples = NULL;
+    struct valarray *vals = NULL;
+    struct idarray *fetchids = NULL;
 
-    // TODO copy ids
-    struct idarray *fetchids;
-    TRYNULL(result, DBENOMEM, fetchids, idarray_create(), cleanup_vals);
+    if (ids->cid_type == CID_ARRAY) {
+        // If we have an array, sort the array so that we can
+        // fetch in sequential order. After the fetch, we sort
+        // the ftuples based on the original index to maintain
+        // alignment fetching after a join.
+        unsigned len = idarray_num(ids->cid_array);
+        TRYNULL(result, DBENOMEM, ftuples,
+                malloc(sizeof(struct fetch_tuple) * len), done);
+        for (unsigned i = 0; i < len; i++) {
+            ftuples[i].fetch_index = i;
+            ftuples[i].fetch_id = (unsigned) idarray_get(ids->cid_array, i);
+        }
+        fetch_tuples_sort_id(ftuples, len);
+        for (unsigned i = 0; i < len; i++) {
+            idarray_set(ids->cid_array, i, (void *) ftuples[i].fetch_id);
+        }
+    } else {
+        TRYNULL(result, DBENOMEM, vals, valarray_create(), cleanup_temps);
+        TRYNULL(result, DBENOMEM, fetchids, idarray_create(), cleanup_temps);
+    }
 
     switch (col->col_disk.cd_stype) {
     case STORAGE_UNSORTED:
     case STORAGE_SORTED:
     case STORAGE_BTREE:
         // we always use the base data to fetch the values
-        result = column_fetch_base_data(col, ids, vals, fetchids);
+        TRY(result, column_fetch_base_data(col, ids, vals, fetchids, ftuples), cleanup_temps);
         break;
     default:
         assert(0);
         break;
     }
-    if (result) {
-        DBLOG(result);
-        goto cleanup_fetchids;
-    }
-    assert(valarray_num(vals) == idarray_num(fetchids));
 
-    // memcpy the results from the resizable array into the pointer in this
-    // struct column_vals
-    TRYNULL(result, DBENOMEM, cvals, malloc(sizeof(struct column_vals)), cleanup_fetchids);
+    // Copy the ids and values into the cval struct
+    TRYNULL(result, DBENOMEM, cvals, malloc(sizeof(struct column_vals)), cleanup_temps);
     bzero(cvals, sizeof(struct column_vals));
-    cvals->cval_len = valarray_num(vals);
+    strcpy(cvals->cval_col, col->col_disk.cd_col_name);
+    cvals->cval_len = (ids->cid_type == CID_ARRAY) ? idarray_num(ids->cid_array)
+            : idarray_num(fetchids);
     TRYNULL(result, DBENOMEM, cvals->cval_vals,
             malloc(sizeof(int) * cvals->cval_len), cleanup_malloc);
-    memcpy(cvals->cval_vals, vals->arr.v, sizeof(int) * cvals->cval_len);
     TRYNULL(result, DBENOMEM, cvals->cval_ids,
-            malloc(sizeof(unsigned) * cvals->cval_len), cleanup_vals_malloc);
-    memcpy(cvals->cval_ids, fetchids->arr.v, sizeof(unsigned) * cvals->cval_len);
-    strcpy(cvals->cval_col, col->col_disk.cd_col_name);
-    result = 0;
-    goto cleanup_fetchids;
+            malloc(sizeof(unsigned) * cvals->cval_len), cleanup_malloc);
 
-  cleanup_vals_malloc:
-    free(cvals->cval_vals);
+    if (ids->cid_type == CID_ARRAY) {
+        unsigned len = idarray_num(ids->cid_array);
+        fetch_tuples_sort_index(ftuples, len);
+        for (unsigned i = 0; i < len; i++) {
+            idarray_set(ids->cid_array, i, (void *) ftuples[i].fetch_id);
+            cvals->cval_ids[i] = ftuples[i].fetch_id;
+            cvals->cval_vals[i] = ftuples[i].fetch_val;
+        }
+    } else {
+        assert(valarray_num(vals) == idarray_num(fetchids));
+        memcpy(cvals->cval_vals, vals->arr.v, sizeof(int) * cvals->cval_len);
+        memcpy(cvals->cval_ids, fetchids->arr.v, sizeof(unsigned) * cvals->cval_len);
+    }
+
+    result = 0;
+    goto cleanup_temps;
+
   cleanup_malloc:
     free(cvals);
     cvals = NULL;
-  cleanup_fetchids:
-    fetchids->arr.num = 0;
-    idarray_destroy(fetchids);
-  cleanup_vals:
-    // no need to free the values because they're just ints
-    vals->arr.num = 0;
-    valarray_destroy(vals);
+  cleanup_temps:
+    if (vals != NULL) {
+        vals->arr.num = 0;
+        valarray_destroy(vals);
+    }
+    if (fetchids != NULL) {
+        fetchids->arr.num = 0;
+        idarray_destroy(fetchids);
+    }
+    if (ftuples != NULL) {
+        free(ftuples);
+    }
   done:
     rwlock_release(col->col_rwlock);
     return cvals;
