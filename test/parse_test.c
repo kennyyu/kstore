@@ -505,6 +505,74 @@ void testprint(void) {
     parse_cleanup_ops(ops);
 }
 
+void testloopjoin(void) {
+    char *query = "r,s=loopjoin(a,b)";
+    struct oparray *ops = parse_query(query);
+    assert(oparray_num(ops) == 1);
+    struct op *op = oparray_get(ops, 0);
+    assert(op->op_type == OP_JOIN);
+    assert(op->op_join.op_join_jtype == JOIN_LOOP);
+    assert(strcmp(op->op_join.op_join_varL,"r") == 0);
+    assert(strcmp(op->op_join.op_join_varR,"s") == 0);
+    assert(strcmp(op->op_join.op_join_inputL,"a") == 0);
+    assert(strcmp(op->op_join.op_join_inputR,"b") == 0);
+    char *s = op_string(op);
+    assert(strcmp(query, s) == 0);
+    free(s);
+    parse_cleanup_ops(ops);
+}
+
+void testsortjoin(void) {
+    char *query = "r,s=sortjoin(a,b)";
+    struct oparray *ops = parse_query(query);
+    assert(oparray_num(ops) == 1);
+    struct op *op = oparray_get(ops, 0);
+    assert(op->op_type == OP_JOIN);
+    assert(op->op_join.op_join_jtype == JOIN_SORT);
+    assert(strcmp(op->op_join.op_join_varL,"r") == 0);
+    assert(strcmp(op->op_join.op_join_varR,"s") == 0);
+    assert(strcmp(op->op_join.op_join_inputL,"a") == 0);
+    assert(strcmp(op->op_join.op_join_inputR,"b") == 0);
+    char *s = op_string(op);
+    assert(strcmp(query, s) == 0);
+    free(s);
+    parse_cleanup_ops(ops);
+}
+
+void testtreejoin(void) {
+    char *query = "r,s=treejoin(a,b)";
+    struct oparray *ops = parse_query(query);
+    assert(oparray_num(ops) == 1);
+    struct op *op = oparray_get(ops, 0);
+    assert(op->op_type == OP_JOIN);
+    assert(op->op_join.op_join_jtype == JOIN_TREE);
+    assert(strcmp(op->op_join.op_join_varL,"r") == 0);
+    assert(strcmp(op->op_join.op_join_varR,"s") == 0);
+    assert(strcmp(op->op_join.op_join_inputL,"a") == 0);
+    assert(strcmp(op->op_join.op_join_inputR,"b") == 0);
+    char *s = op_string(op);
+    assert(strcmp(query, s) == 0);
+    free(s);
+    parse_cleanup_ops(ops);
+}
+
+void testhashjoin(void) {
+    char *query = "r,s=hashjoin(a,b)";
+    struct oparray *ops = parse_query(query);
+    assert(oparray_num(ops) == 1);
+    struct op *op = oparray_get(ops, 0);
+    assert(op->op_type == OP_JOIN);
+    assert(op->op_join.op_join_jtype == JOIN_HASH);
+    assert(strcmp(op->op_join.op_join_varL,"r") == 0);
+    assert(strcmp(op->op_join.op_join_varR,"s") == 0);
+    assert(strcmp(op->op_join.op_join_inputL,"a") == 0);
+    assert(strcmp(op->op_join.op_join_inputR,"b") == 0);
+    char *s = op_string(op);
+    assert(strcmp(query, s) == 0);
+    free(s);
+    parse_cleanup_ops(ops);
+}
+
 void testbad(void) {
     char *query = "";
     struct oparray *ops = parse_query(query);
@@ -584,4 +652,8 @@ int main(void) {
     testdiv();
     testdivassign();
     testprint();
+    testloopjoin();
+    testsortjoin();
+    testtreejoin();
+    testhashjoin();
 }

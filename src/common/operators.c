@@ -107,6 +107,14 @@ char *op_string(struct op *op) {
     case OP_PRINT:
         sprintf(buf, "print(%s)", op->op_print.op_print_var);
         break;
+    case OP_JOIN:
+        sprintf(buf, "%s,%s=%s(%s,%s)",
+                op->op_join.op_join_varL,
+                op->op_join.op_join_varR,
+                join_type_string(op->op_join.op_join_jtype),
+                op->op_join.op_join_inputL,
+                op->op_join.op_join_inputR);
+        break;
     default: assert(0); return NULL;
     }
 
@@ -154,6 +162,16 @@ char *agg_type_string(enum agg_type atype) {
     case AGG_SUM: return "sum";
     case AGG_AVG: return "avg";
     case AGG_COUNT: return "count";
+    default: assert(0); return NULL;
+    }
+}
+
+char *join_type_string(enum join_type jtype) {
+    switch (jtype) {
+    case JOIN_LOOP: return "loopjoin";
+    case JOIN_SORT: return "sortjoin";
+    case JOIN_TREE: return "treejoin";
+    case JOIN_HASH: return "hashjoin";
     default: assert(0); return NULL;
     }
 }

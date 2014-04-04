@@ -22,6 +22,7 @@ enum op_type {
     OP_AGG,
     OP_MATH,
     OP_PRINT,
+    OP_JOIN,
 };
 
 enum storage_type {
@@ -43,6 +44,13 @@ enum math_type {
     MATH_SUB,
     MATH_MUL,
     MATH_DIV,
+};
+
+enum join_type {
+    JOIN_LOOP,
+    JOIN_SORT,
+    JOIN_TREE,
+    JOIN_HASH,
 };
 
 struct op_tuple {
@@ -103,6 +111,14 @@ struct op_print {
     char op_print_var[COLUMNLEN];
 };
 
+struct op_join {
+    enum join_type op_join_jtype;
+    char op_join_inputL[COLUMNLEN];
+    char op_join_inputR[COLUMNLEN];
+    char op_join_varL[COLUMNLEN];
+    char op_join_varR[COLUMNLEN];
+};
+
 struct op {
     enum op_type op_type;
     union {
@@ -115,6 +131,7 @@ struct op {
         struct op_agg op_agg;
         struct op_math op_math;
         struct op_print op_print;
+        struct op_join op_join;
     };
 };
 
@@ -122,6 +139,7 @@ enum storage_type storage_type_from_string(char *s);
 char *storage_type_string(enum storage_type stype);
 char *math_type_string(enum math_type mtype);
 char *agg_type_string(enum agg_type atype);
+char *join_type_string(enum join_type jtype);
 
 // This string must be destroyed by the caller
 char *op_string(struct op *op);

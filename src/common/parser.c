@@ -335,6 +335,46 @@ parse_line(char *line)
         op->op_type = OP_PRINT;
         goto done;
     }
+    bzero(op, sizeof(struct op));
+    if (sscanf(line, "%[^=,],%[^=,]=loopjoin(%[^,],%[^)])",
+        (char *) &op->op_join.op_join_varL,
+        (char *) &op->op_join.op_join_varR,
+        (char *) &op->op_join.op_join_inputL,
+        (char *) &op->op_join.op_join_inputR) == 4) {
+        op->op_type = OP_JOIN;
+        op->op_join.op_join_jtype = JOIN_LOOP;
+        goto done;
+    }
+    bzero(op, sizeof(struct op));
+    if (sscanf(line, "%[^=,],%[^=,]=sortjoin(%[^,],%[^)])",
+        (char *) &op->op_join.op_join_varL,
+        (char *) &op->op_join.op_join_varR,
+        (char *) &op->op_join.op_join_inputL,
+        (char *) &op->op_join.op_join_inputR) == 4) {
+        op->op_type = OP_JOIN;
+        op->op_join.op_join_jtype = JOIN_SORT;
+        goto done;
+    }
+    bzero(op, sizeof(struct op));
+    if (sscanf(line, "%[^=,],%[^=,]=treejoin(%[^,],%[^)])",
+        (char *) &op->op_join.op_join_varL,
+        (char *) &op->op_join.op_join_varR,
+        (char *) &op->op_join.op_join_inputL,
+        (char *) &op->op_join.op_join_inputR) == 4) {
+        op->op_type = OP_JOIN;
+        op->op_join.op_join_jtype = JOIN_TREE;
+        goto done;
+    }
+    bzero(op, sizeof(struct op));
+    if (sscanf(line, "%[^=,],%[^=,]=hashjoin(%[^,],%[^)])",
+        (char *) &op->op_join.op_join_varL,
+        (char *) &op->op_join.op_join_varR,
+        (char *) &op->op_join.op_join_inputL,
+        (char *) &op->op_join.op_join_inputR) == 4) {
+        op->op_type = OP_JOIN;
+        op->op_join.op_join_jtype = JOIN_HASH;
+        goto done;
+    }
     goto cleanup_op;
 
   cleanup_op:

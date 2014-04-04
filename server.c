@@ -578,6 +578,16 @@ server_eval_tuple(struct server_jobctx *jobctx, struct op *op)
 
 static
 int
+server_eval_join(struct server_jobctx *jobctx, struct op *op)
+{
+    (void) jobctx;
+    (void) op;
+    // TODO
+    return 0;
+}
+
+static
+int
 server_eval(struct server_jobctx *jobctx, struct op *op)
 {
     assert(jobctx != NULL);
@@ -607,6 +617,8 @@ server_eval(struct server_jobctx *jobctx, struct op *op)
         return server_eval_math(jobctx, op);
     case OP_PRINT:
         return server_eval_print(jobctx, op);
+    case OP_JOIN:
+        return server_eval_join(jobctx, op);
     default:
         assert(0);
         return -1;
