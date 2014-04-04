@@ -9,6 +9,7 @@
 #include "file.h"
 #include "btree.h"
 #include "../../common/include/cassert.h"
+#include "../../common/include/results.h"
 
 #define COLUMN_TAKEN 0xCAFEBABE
 #define COLUMN_FREE 0x0
@@ -53,15 +54,6 @@ struct storage {
     struct columnarray *st_open_cols; // array of open columns
 };
 
-struct column_ids {
-    struct bitmap *cid_bitmap;
-};
-
-struct column_vals {
-    int *cval_vals;
-    unsigned cval_len;
-};
-
 struct column_entry_unsorted {
     int ce_val;
 };
@@ -102,7 +94,5 @@ int column_load(struct column *col, int *vals, uint64_t num);
 // need reader/writer locks for select,fetch (read) and insert(write)
 struct column_ids *column_select(struct column *col, struct op *op);
 struct column_vals *column_fetch(struct column *col, struct column_ids *ids);
-void column_ids_destroy(struct column_ids *cids);
-void column_vals_destroy(struct column_vals *vals);
 
 #endif

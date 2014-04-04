@@ -16,6 +16,7 @@
 #include "include/parser.h"
 #include "include/dberror.h"
 #include "include/array.h"
+#include "include/results.h"
 
 // 64 bit conversion taken from:
 // http://stackoverflow.com/questions/809902/64-bit-ntohl-in-c
@@ -309,11 +310,21 @@ rpc_write_select_result(int fd, struct column_ids *cids)
     // materialize the ids
     int result;
     unsigned len = 0;
-    for (unsigned i = 0; i < bitmap_nbits(cids->cid_bitmap); i++) {
-        if (bitmap_isset(cids->cid_bitmap, i)) {
-            len++;
+    switch (cids->cid_type) {
+    case CID_BITMAP:
+        for (unsigned i = 0; i < bitmap_nbits(cids->cid_bitmap); i++) {
+            if (bitmap_isset(cids->cid_bitmap, i)) {
+                len++;
+            }
         }
+        break;
+    case CID_ARRAY:
+        len = cids->cid_len;
+        break;
     }
+
+    struct cid_iterator iter;
+    cid_iter_init(&iter, cids);
 
     // Prepare the header and serialize the results
     struct rpc_header msg;
@@ -321,17 +332,17 @@ rpc_write_select_result(int fd, struct column_ids *cids)
     msg.rpc_magic = RPC_HEADER_MAGIC;
     msg.rpc_len = len * sizeof(unsigned);
     TRY(result, rpc_write_header(fd, &msg), done);
-    for (unsigned i = 0; i < bitmap_nbits(cids->cid_bitmap); i++) {
-        if (bitmap_isset(cids->cid_bitmap, i)) {
-            uint32_t networkint = htonl((uint32_t) i);
-            TRY(result, io_write(fd, &networkint, sizeof(uint32_t)), done);
-        }
+    while (cid_iter_has_next(&iter)) {
+        uint32_t i = (uint32_t) cid_iter_get(&iter);
+        uint32_t networkint = htonl((uint32_t) i);
+        TRY(result, io_write(fd, &networkint, sizeof(uint32_t)), done);
     }
 
     // success
     result = 0;
     goto done;
   done:
+    cid_iter_cleanup(&iter);
     return result;
 }
 

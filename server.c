@@ -21,6 +21,7 @@
 #include "src/common/include/search.h"
 #include "src/common/include/dberror.h"
 #include "src/common/include/try.h"
+#include "src/common/include/results.h"
 #include "src/server/include/storage.h"
 #include "src/server/include/aggregate.h"
 

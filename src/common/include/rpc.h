@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 #include "operators.h"
-#include "../../server/include/storage.h"
+#include "results.h"
 
 #define RPC_HEADER_MAGIC 0xDEADBEEF
 

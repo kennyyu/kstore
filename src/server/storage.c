@@ -17,6 +17,7 @@
 #include "../common/include/search.h"
 #include "../common/include/dberror.h"
 #include "../common/include/try.h"
+#include "../common/include/results.h"
 
 #define METADATA_FILENAME "metadata"
 
@@ -456,6 +457,7 @@ btree_select_range(struct column *col,
 {
     assert(col != NULL);
     assert(cids != NULL);
+    assert(cids->cid_type == CID_BITMAP);
     assert(pleft != BTREE_PAGE_NULL);
     assert(pright != BTREE_PAGE_NULL);
     assert(ixleft <= BTENTRY_PER_PAGE);
@@ -783,6 +785,7 @@ column_select_btree(struct column *col, struct op *op,
     assert(col != NULL);
     assert(op != NULL);
     assert(cids != NULL);
+    assert(cids->cid_type == CID_BITMAP);
 
     int result;
     page_t pleft, pright;
@@ -840,6 +843,7 @@ column_select_sorted_range(struct column *col, uint64_t left, uint64_t right,
 {
     assert(col != NULL);
     assert(cids != NULL);
+    assert(cids->cid_type == CID_BITMAP);
     assert(left <= right);
     assert(right <= col->col_disk.cd_ntuples);
     assert(PAGESIZE % sizeof(struct column_entry_sorted) == 0);
@@ -956,6 +960,7 @@ column_select_sorted(struct column *col, struct op *op,
     assert(col != NULL);
     assert(op != NULL);
     assert(cids != NULL);
+    assert(cids->cid_type == CID_BITMAP);
 
     int result;
     uint64_t left;
@@ -1024,6 +1029,7 @@ column_select_unsorted(struct column *col, struct op *op,
     assert(col != NULL);
     assert(op != NULL);
     assert(cids != NULL);
+    assert(cids->cid_type == CID_BITMAP);
     assert(PAGESIZE % sizeof(struct column_entry_unsorted) == 0);
 
     int result;
@@ -1061,6 +1067,7 @@ column_select(struct column *col, struct op *op)
     TRYNULL(result, DBENOMEM, cids, malloc(sizeof(struct column_ids)), done);
     TRYNULL(result, DBENOMEM,
             cids->cid_bitmap, bitmap_create(col->col_disk.cd_ntuples), cleanup_malloc);
+    cids->cid_type = CID_BITMAP;
     // select based on the storage type of the column
     switch (col->col_disk.cd_stype) {
     case STORAGE_UNSORTED:
@@ -1093,14 +1100,6 @@ column_select(struct column *col, struct op *op)
     return cids;
 }
 
-void
-column_ids_destroy(struct column_ids *cids)
-{
-    assert(cids != NULL);
-    bitmap_destroy(cids->cid_bitmap);
-    free(cids);
-}
-
 // PRECONDITION: MUST BE HOLDING LOCK ON COLUMN
 static
 int
@@ -1108,13 +1107,13 @@ column_fetch_base_data(struct column *col, struct column_ids *ids,
                        struct valarray *vals)
 {
     int result;
-    uint64_t ntuples = col->col_disk.cd_ntuples;
+    struct cid_iterator iter;
+    cid_iter_init(&iter, ids);
+
     page_t curpage = 0;
     struct column_entry_unsorted colentrybuf[COLENTRY_UNSORTED_PER_PAGE];
-    for (uint64_t i = 0; i < ntuples; i++) {
-        if (!bitmap_isset(ids->cid_bitmap, i)) {
-            continue;
-        }
+    while (cid_iter_has_next(&iter)) {
+        uint64_t i = cid_iter_get(&iter);
         page_t requestedpage =
                 FILE_FIRST_PAGE + (i / COLENTRY_UNSORTED_PER_PAGE);
         assert(requestedpage != 0);
@@ -1132,6 +1131,7 @@ column_fetch_base_data(struct column *col, struct column_ids *ids,
     result = 0;
     goto done;
   done:
+    cid_iter_cleanup(&iter);
     return result;
 }
 
@@ -1145,7 +1145,17 @@ column_fetch(struct column *col, struct column_ids *ids)
 
     rwlock_acquire_read(col->col_rwlock);
     uint64_t ntuples = col->col_disk.cd_ntuples;
-    if (ntuples != bitmap_nbits(ids->cid_bitmap)) {
+    uint64_t actualtuples;
+    switch (ids->cid_type) {
+    case CID_BITMAP:
+        actualtuples = bitmap_nbits(ids->cid_bitmap);
+        break;
+    case CID_ARRAY:
+        actualtuples = ids->cid_len;
+        break;
+    default: assert(0); break;
+    }
+    if (ntuples != actualtuples) {
         result = DBECOLDIFFLEN;
         DBLOG(result);
         goto done;
@@ -1190,14 +1200,6 @@ column_fetch(struct column *col, struct column_ids *ids)
   done:
     rwlock_release(col->col_rwlock);
     return cvals;
-}
-
-void
-column_vals_destroy(struct column_vals *vals)
-{
-    assert(vals != NULL);
-    free(vals->cval_vals);
-    free(vals);
 }
 
 static
