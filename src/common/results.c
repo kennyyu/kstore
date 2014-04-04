@@ -55,10 +55,7 @@ cid_iter_has_next(struct cid_iterator *iter)
         return false;
     case CID_ARRAY:
         // We still have a next element as long as we're less than the bound
-        while (iter->ciditer_i < iter->ciditer_ids->cid_len) {
-            return true;
-        }
-        return false;
+        return (iter->ciditer_i < iter->ciditer_ids->cid_len);
     default: assert(0); return false;
     }
 }
