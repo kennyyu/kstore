@@ -606,6 +606,7 @@ server_eval_join(struct server_jobctx *jobctx, struct op *op)
 
     struct column_ids *idsL, *idsR;
     TRY(result, column_join(op->op_join.op_join_jtype,
+                            jobctx->sj_storage,
                             inputL->vt_column_vals,
                             inputR->vt_column_vals,
                             &idsL, &idsR), done);

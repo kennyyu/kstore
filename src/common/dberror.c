@@ -39,6 +39,7 @@ dberror_string(enum dberror result)
     case DBEINTERMDIFFLEN: return "intermediates have different lengths";
     case DBEDIVZERO: return "division by zero";
     case DBECOLDIFFLEN: return "select intermediate and column have different lengths";
+    case DBENOTREE: return "no btree on join input tree column";
     default:
         assert(0);
         return NULL;

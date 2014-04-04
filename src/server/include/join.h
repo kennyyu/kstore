@@ -6,6 +6,7 @@
 #include "storage.h"
 
 int column_join(enum join_type jtype,
+                struct storage *storage,
                 struct column_vals *inputL,
                 struct column_vals *inputR,
                 struct column_ids **retidsL,

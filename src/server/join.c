@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
 
 #include "../common/include/operators.h"
 #include "../common/include/results.h"
@@ -12,7 +13,8 @@
 
 static
 int
-column_join_loop(struct column_vals *inputL,
+column_join_loop(struct storage *storage,
+                 struct column_vals *inputL,
                  struct column_vals *inputR,
                  struct column_ids *retidsL,
                  struct column_ids *retidsR)
@@ -98,7 +100,8 @@ column_join_sort_repeats(
 
 static
 int
-column_join_sort(struct column_vals *inputL,
+column_join_sort(struct storage *storage,
+                 struct column_vals *inputL,
                  struct column_vals *inputR,
                  struct column_ids *retidsL,
                  struct column_ids *retidsR)
@@ -153,38 +156,87 @@ column_join_sort(struct column_vals *inputL,
 
 static
 int
-column_join_tree(struct column_vals *inputL,
+column_join_tree(struct storage *storage,
+                 struct column_vals *inputL,
                  struct column_vals *inputR,
                  struct column_ids *retidsL,
                  struct column_ids *retidsR)
 {
-    return column_join_sort(inputL, inputR, retidsL, retidsR);
+    assert(strcmp(inputR->cval_col, "") != 0);
+    int result;
+
+    // Make sure a Btree exists on the right column
+    struct column *col = NULL;
+    TRYNULL(result, DBECOLOPEN, col, column_open(storage, inputR->cval_col), done);
+    if (col->col_disk.cd_stype != STORAGE_BTREE) {
+        result = DBENOTREE;
+        DBLOG(result);
+        goto cleanup_col;
+    }
+    // TODO: require building a tree on the fly because inputR
+    // is a subset of the btree
+
+    // For each value in the left column, scan the btree for the value
+    struct column_ids *cids = NULL;
+    for (unsigned i = 0; i < inputL->cval_len; i++) {
+        struct op op;
+        bzero(&op, sizeof(struct op));
+        op.op_type = OP_SELECT_VALUE;
+        op.op_select.op_sel_value = inputL->cval_vals[i];
+        strcpy(op.op_select.op_sel_col, inputR->cval_col);
+
+        TRYNULL(result, DBECOLSELECT, cids, column_select(col, &op), cleanup_cids);
+        unsigned leftid = inputL->cval_ids[i];
+        struct cid_iterator iter;
+        cid_iter_init(&iter, cids);
+        while (cid_iter_has_next(&iter)) {
+            unsigned rightid = cid_iter_get(&iter);
+            TRY(result, idarray_add(retidsL->cid_array, (void *) leftid, NULL), cleanup_cids);
+            TRY(result, idarray_add(retidsR->cid_array, (void *) rightid, NULL), cleanup_cids);
+        }
+        cid_iter_cleanup(&iter);
+        column_ids_destroy(cids);
+    }
+
+    result = 0;
+    goto cleanup_col;
+  cleanup_cids:
+    if (cids != NULL) {
+        column_ids_destroy(cids);
+    }
+  cleanup_col:
+    column_close(col);
+  done:
+    return result;
 }
 
 static
 int
-column_join_hash(struct column_vals *inputL,
+column_join_hash(struct storage *storage,
+                 struct column_vals *inputL,
                  struct column_vals *inputR,
                  struct column_ids *retidsL,
                  struct column_ids *retidsR)
 {
-    return column_join_sort(inputL, inputR, retidsL, retidsR);
+    return column_join_sort(storage, inputL, inputR, retidsL, retidsR);
 }
 
 int
 column_join(enum join_type jtype,
+            struct storage *storage,
             struct column_vals *inputL,
             struct column_vals *inputR,
             struct column_ids **retidsL,
             struct column_ids **retidsR)
 {
+    assert(storage != NULL);
     assert(inputL != NULL);
     assert(inputR != NULL);
     assert(retidsL != NULL);
     assert(retidsR != NULL);
 
-    if (inputL->cval_len < inputR->cval_len) {
-        return column_join(jtype, inputR, inputL, retidsR, retidsL);
+    if (jtype != JOIN_TREE && inputL->cval_len < inputR->cval_len) {
+        return column_join(jtype, storage, inputR, inputL, retidsR, retidsL);
     }
 
     int result;
@@ -198,16 +250,16 @@ column_join(enum join_type jtype,
 
     switch (jtype) {
     case JOIN_LOOP:
-        TRY(result, column_join_loop(inputL, inputR, idsL, idsR), cleanup_idsRarray);
+        TRY(result, column_join_loop(storage, inputL, inputR, idsL, idsR), cleanup_idsRarray);
         break;
     case JOIN_SORT:
-        TRY(result, column_join_sort(inputL, inputR, idsL, idsR), cleanup_idsRarray);
+        TRY(result, column_join_sort(storage, inputL, inputR, idsL, idsR), cleanup_idsRarray);
         break;
     case JOIN_TREE:
-        TRY(result, column_join_tree(inputL, inputR, idsL, idsR), cleanup_idsRarray);
+        TRY(result, column_join_tree(storage, inputL, inputR, idsL, idsR), cleanup_idsRarray);
         break;
     case JOIN_HASH:
-        TRY(result, column_join_hash(inputL, inputR, idsL, idsR), cleanup_idsRarray);
+        TRY(result, column_join_hash(storage, inputL, inputR, idsL, idsR), cleanup_idsRarray);
         break;
     default:
         assert(0);
