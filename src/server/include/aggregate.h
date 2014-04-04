@@ -2,6 +2,7 @@
 #define _AGGREGATE_H_
 
 #include "../../common/include/operators.h"
+#include "../../common/include/results.h"
 #include "storage.h"
 
 typedef int (*agg_func_t)(struct column_vals *);

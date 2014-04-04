@@ -24,6 +24,7 @@
 #include "src/common/include/results.h"
 #include "src/server/include/storage.h"
 #include "src/server/include/aggregate.h"
+#include "src/server/include/join.h"
 
 #define PORT 5000
 #define BACKLOG 16
@@ -580,10 +581,48 @@ static
 int
 server_eval_join(struct server_jobctx *jobctx, struct op *op)
 {
-    (void) jobctx;
-    (void) op;
-    // TODO
-    return 0;
+    assert(jobctx != NULL);
+    assert(op != NULL);
+    assert(op->op_type == OP_JOIN);
+
+    int result;
+
+    // Try to find the column intermediates
+    struct vartuple *inputL, *inputR;
+    TRYNULL(result, DBENOVAR, inputL,
+            server_eval_get_var(jobctx->sj_env, op->op_join.op_join_inputL),
+            done);
+    TRYNULL(result, DBENOVAR, inputR,
+            server_eval_get_var(jobctx->sj_env, op->op_join.op_join_inputR),
+            done);
+    if (inputL->vt_type != VAR_VALS
+        || inputR->vt_type != VAR_VALS
+        || inputL->vt_column_vals->cval_ids == NULL
+        || inputR->vt_column_vals->cval_ids == NULL) {
+        result = DBEVARTYPE;
+        DBLOG(result);
+        goto done;
+    }
+
+    struct column_ids *idsL, *idsR;
+    TRY(result, column_join(op->op_join.op_join_jtype,
+                            inputL->vt_column_vals,
+                            inputR->vt_column_vals,
+                            &idsL, &idsR), done);
+
+    // Don't allow these to fail
+    result = server_add_var(jobctx->sj_env, op->op_join.op_join_varL,
+                            VAR_IDS, idsL, NULL);
+    assert(result == 0);
+    result = server_add_var(jobctx->sj_env, op->op_join.op_join_varR,
+                            VAR_IDS, idsR, NULL);
+    assert(result == 0);
+
+    // success
+    result = 0;
+    goto done;
+  done:
+    return result;
 }
 
 static
