@@ -781,7 +781,7 @@ main(int argc, char **argv)
             break;
         case 'h':
             printf("Usage: %s\n", argv[0]);
-            printf("--help\n");
+            printf("--help -h\n");
             printf("--port P        [default=5000]\n");
             printf("--backlog B     [default=16]\n");
             printf("--nthreads T    [default=16]\n");

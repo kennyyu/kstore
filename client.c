@@ -382,9 +382,9 @@ main(int argc, char **argv)
             break;
         case 'h':
             printf("Usage: %s\n", argv[0]);
-            printf("--help\n");
-            printf("--port P        [default=5000]\n");
-            printf("--host H        [default=localhost]\n");
+            printf("--help -h\n");
+            printf("--port P         [default=5000]\n");
+            printf("--host H         [default=localhost]\n");
             printf("--loaddir dir    [default=p2tests]\n");
             printf("--interactive\n");
             return 0;
