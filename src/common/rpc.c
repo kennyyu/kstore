@@ -74,6 +74,16 @@ rpc_write_terminate(int fd)
 }
 
 int
+rpc_write_ok(int fd)
+{
+    struct rpc_header msg;
+    msg.rpc_type = RPC_OK;
+    msg.rpc_len = 0;
+    msg.rpc_magic = RPC_HEADER_MAGIC;
+    return rpc_write_header(fd, &msg);
+}
+
+int
 rpc_read_header(int fd, struct rpc_header *message)
 {
     assert(message != NULL);

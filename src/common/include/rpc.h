@@ -14,12 +14,13 @@
 //   actual payload
 
 enum rpc_type {
+    RPC_OK,
+    RPC_ERROR,
+    RPC_TERMINATE,
     RPC_QUERY,
     RPC_FILE,
     RPC_SELECT_RESULT,
     RPC_FETCH_RESULT,
-    RPC_ERROR,
-    RPC_TERMINATE,
     RPC_TUPLE_RESULT,
 };
 
@@ -58,5 +59,7 @@ int rpc_write_error(int fd, char *error);
 int rpc_read_error(int fd, struct rpc_header *msg, char **retmsg);
 
 int rpc_write_terminate(int fd);
+
+int rpc_write_ok(int fd);
 
 #endif

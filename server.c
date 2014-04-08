@@ -716,6 +716,8 @@ server_routine(void *arg, unsigned threadnum)
             assert(0);
             break;
         }
+        assert(result == 0);
+        TRY(result, rpc_write_ok(clientfd), cleanup_op);
         continue;
 
       cleanup_op:
