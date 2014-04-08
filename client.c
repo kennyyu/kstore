@@ -445,11 +445,17 @@ main(int argc, char **argv)
         goto done;
     }
 
+    // Start a client in batch or interactive mode
     if (client_options.copt_interactive) {
         result = client_interactive(sockfd);
     } else {
         result = client_batch(sockfd);
     }
+    if (result) {
+        DBLOG(result);
+        goto cleanup_sockfd;
+    }
+    result = 0;
 
   cleanup_sockfd:
     (void) rpc_write_terminate(sockfd);
