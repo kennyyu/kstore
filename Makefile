@@ -108,4 +108,7 @@ client: $(COMMON_OBJS) $(CLIENT_OBJS) client.o
 clean:
 	rm -rf $(OBJDIR) *~ core client server *.o $(TEST_OBJDIR)
 
-.PHONY: clean
+reset: clean
+	rm -rf db tmp.*
+
+.PHONY: clean reset
