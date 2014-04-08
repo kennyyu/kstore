@@ -168,7 +168,7 @@ parse_sockfd(int sockfd)
             goto done;
         case RPC_ERROR:
             result = client_handle_error(sockfd, &msg);
-            break;
+            goto done;
         case RPC_TERMINATE:
             if (client_options.copt_interactive) {
                 fprintf(stderr, "Received TERMINATE from server\n");
