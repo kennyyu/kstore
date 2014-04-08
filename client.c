@@ -67,6 +67,144 @@ const struct option long_options[] = {
 
 static
 int
+client_handle_fetch(int sockfd, struct rpc_header *msg)
+{
+    assert(msg->rpc_type == RPC_FETCH_RESULT);
+    int *vals = NULL;
+    unsigned nvals;
+    int result;
+    TRY(result, rpc_read_fetch_result(sockfd, msg, &vals, &nvals), done);
+    assert(vals != NULL);
+    for (unsigned i = 0; i < nvals; i++) {
+        printf("%d\n", vals[i]);
+    }
+    free(vals);
+
+    result = 0;
+    goto done;
+
+  done:
+    return result;
+}
+
+static
+int
+client_handle_select(int sockfd, struct rpc_header *msg)
+{
+    assert(msg->rpc_type == RPC_SELECT_RESULT);
+    unsigned *ids = NULL;
+    unsigned nids;
+    int result;
+    TRY(result, rpc_read_select_result(sockfd, msg, &ids, &nids), done);
+    assert(ids != NULL);
+    for (unsigned i = 0; i < nids; i++) {
+        printf("%d\n", ids[i]);
+    }
+    free(ids);
+
+    result = 0;
+    goto done;
+
+  done:
+    return result;
+}
+
+static
+int
+client_handle_error(int sockfd, struct rpc_header *msg)
+{
+    assert(msg->rpc_type == RPC_ERROR);
+    char *error = NULL;
+    int result;
+    TRY(result, rpc_read_error(sockfd, msg, &error), done);
+    assert(error != NULL);
+    printf("[SERVER ERROR: %s]\n", error);
+    free(error);
+
+    result = 0;
+    goto done;
+  done:
+    return result;
+}
+
+static
+int
+client_handle_tuple(int sockfd, struct rpc_header *msg)
+{
+    assert(msg->rpc_type == RPC_TUPLE_RESULT);
+    int *tuple = NULL;
+    unsigned len;
+    int result;
+    TRY(result, rpc_read_tuple_result(sockfd, msg, &tuple, &len), done);
+    assert(tuple != NULL);
+    printf("(");
+    for (unsigned i = 0; i < len - 1; i++) {
+        printf("%d,", tuple[i]);
+    }
+    printf("%d)\n", tuple[len - 1]);
+    free(tuple);
+
+    result = 0;
+    goto done;
+
+  done:
+    return result;
+}
+
+static
+int
+parse_sockfd(int sockfd)
+{
+    int result;
+    struct rpc_header msg;
+
+    // We keep looping until we get an OK, ERROR, or TERMINATE message
+    while (1) {
+        bzero(&msg, sizeof(struct rpc_header));
+        TRY(result, rpc_read_header(sockfd, &msg), done);
+        switch (msg.rpc_type) {
+        case RPC_OK:
+            result = 0;
+            goto done;
+        case RPC_ERROR:
+            result = client_handle_error(sockfd, &msg);
+            break;
+        case RPC_TERMINATE:
+            if (client_options.copt_interactive) {
+                fprintf(stderr, "Received TERMINATE from server\n");
+            }
+            result = DBESERVERTERM;
+            break;
+        case RPC_FETCH_RESULT:
+            result = client_handle_fetch(sockfd, &msg);
+            break;
+        case RPC_SELECT_RESULT:
+            result = client_handle_select(sockfd, &msg);
+            break;
+        case RPC_TUPLE_RESULT:
+            result = client_handle_tuple(sockfd, &msg);
+            break;
+        default:
+            assert(0);
+            break;
+        }
+        if (result) {
+            goto done;
+        }
+    }
+
+    // success
+    result = 0;
+    goto done;
+  done:
+    if (!dberror_client_is_fatal(result)) {
+        result = DBSUCCESS;
+    }
+    return result;
+}
+
+static
+int
 parse_stdin_string(int sockfd, char *s)
 {
     int result;
@@ -89,149 +227,6 @@ parse_stdin_string(int sockfd, char *s)
   cleanup_ops:
     parse_cleanup_ops(ops);
   done:
-    return result;
-}
-
-static
-int
-client_handle_fetch(int readfd, int writefd, struct rpc_header *msg)
-{
-    (void) writefd;
-    assert(msg->rpc_type == RPC_FETCH_RESULT);
-    int *vals = NULL;
-    unsigned nvals;
-    int result;
-    TRY(result, rpc_read_fetch_result(readfd, msg, &vals, &nvals), done);
-    assert(vals != NULL);
-    for (unsigned i = 0; i < nvals; i++) {
-        printf("%d\n", vals[i]);
-    }
-    free(vals);
-
-    result = 0;
-    goto done;
-
-  done:
-    return result;
-}
-
-static
-int
-client_handle_select(int readfd, int writefd, struct rpc_header *msg)
-{
-    (void) writefd;
-    assert(msg->rpc_type == RPC_SELECT_RESULT);
-    unsigned *ids = NULL;
-    unsigned nids;
-    int result;
-    TRY(result, rpc_read_select_result(readfd, msg, &ids, &nids), done);
-    assert(ids != NULL);
-    for (unsigned i = 0; i < nids; i++) {
-        printf("%d\n", ids[i]);
-    }
-    free(ids);
-
-    result = 0;
-    goto done;
-
-  done:
-    return result;
-}
-
-static
-int
-client_handle_error(int readfd, int writefd, struct rpc_header *msg)
-{
-    (void) writefd;
-    assert(msg->rpc_type == RPC_ERROR);
-    char *error = NULL;
-    int result;
-    TRY(result, rpc_read_error(readfd, msg, &error), done);
-    assert(error != NULL);
-    printf("[SERVER ERROR: %s]\n", error);
-    free(error);
-
-    result = 0;
-    goto done;
-  done:
-    return result;
-}
-
-static
-int
-client_handle_tuple(int readfd, int writefd, struct rpc_header *msg)
-{
-    (void) writefd;
-    assert(msg->rpc_type == RPC_TUPLE_RESULT);
-    int *tuple = NULL;
-    unsigned len;
-    int result;
-    TRY(result, rpc_read_tuple_result(readfd, msg, &tuple, &len), done);
-    assert(tuple != NULL);
-    printf("(");
-    for (unsigned i = 0; i < len - 1; i++) {
-        printf("%d,", tuple[i]);
-    }
-    printf("%d)\n", tuple[len - 1]);
-    free(tuple);
-
-    result = 0;
-    goto done;
-
-  done:
-    return result;
-}
-
-static
-int
-parse_sockfd(int readfd, int writefd)
-{
-    (void) writefd;
-    int result;
-    struct rpc_header msg;
-
-    // We keep looping until we get an OK, ERROR, or TERMINATE message
-    while (1) {
-        bzero(&msg, sizeof(struct rpc_header));
-        TRY(result, rpc_read_header(readfd, &msg), done);
-        switch (msg.rpc_type) {
-        case RPC_OK:
-            result = 0;
-            goto done;
-        case RPC_ERROR:
-            result = client_handle_error(readfd, writefd, &msg);
-            break;
-        case RPC_TERMINATE:
-            if (client_options.copt_interactive) {
-                fprintf(stderr, "Received TERMINATE from server\n");
-            }
-            result = DBESERVERTERM;
-            break;
-        case RPC_FETCH_RESULT:
-            result = client_handle_fetch(readfd, writefd, &msg);
-            break;
-        case RPC_SELECT_RESULT:
-            result = client_handle_select(readfd, writefd, &msg);
-            break;
-        case RPC_TUPLE_RESULT:
-            result = client_handle_tuple(readfd, writefd, &msg);
-            break;
-        default:
-            assert(0);
-            break;
-        }
-        if (result) {
-            goto done;
-        }
-    }
-
-    // success
-    result = 0;
-    goto done;
-  done:
-    if (!dberror_client_is_fatal(result)) {
-        result = DBSUCCESS;
-    }
     return result;
 }
 
@@ -275,10 +270,7 @@ client_interactive(int sockfd)
                 goto done;
             }
         }
-        // wait for response from server
-        //printf("\r     \r");
-        //fflush(stdout);
-        TRY(result, parse_sockfd(sockfd, STDOUT_FILENO), done);
+        TRY(result, parse_sockfd(sockfd), done);
     }
     result = 0;
     goto done;
@@ -353,7 +345,7 @@ client_batch(int sockfd)
 
         // if we get something from the socket, parse it and write it to stdout
         if (read_socket && FD_ISSET(sockfd, &readfds)) {
-            result = parse_sockfd(sockfd, STDOUT_FILENO);
+            result = parse_sockfd(sockfd);
             if (result) {
                 read_socket = false;
             }
