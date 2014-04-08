@@ -21,6 +21,8 @@
 #include "src/common/include/io.h"
 #include "src/common/include/dberror.h"
 #include "src/common/include/try.h"
+#include <readline/readline.h>
+#include <readline/history.h>
 
 // boolean to tell the client to keep looping
 static bool volatile keep_running = true;
@@ -65,36 +67,21 @@ const struct option long_options[] = {
 
 static
 int
-parse_stdin(int readfd, int writefd)
+parse_stdin_string(int sockfd, char *s)
 {
     int result;
-    char buf[TUPLELEN];
-    bzero(buf, TUPLELEN);
-    result = 0;
-    unsigned ix = 0;
-    while (1) {
-        result = read(readfd, buf + ix, 1);
-        if (result == -1 || result == 0) {
-            result = DBEIOCHECKERRNO;
-            goto done;
-        }
-        ix++;
-        if (buf[ix-1] == '\n' || buf[ix-1] == '\0') {
-            break;
-        }
-    }
     struct oparray *ops;
-    TRYNULL(result, DBEPARSE, ops, parse_query(buf), done);
+    TRYNULL(result, DBEPARSE, ops, parse_query(s), done);
 
     for (unsigned i = 0; i < oparray_num(ops); i++) {
         struct op *op = oparray_get(ops, i);
-        TRY(result, rpc_write_query(writefd, op), cleanup_ops);
+        TRY(result, rpc_write_query(sockfd, op), cleanup_ops);
         if (op->op_type == OP_LOAD) {
             char loadfilebuf[128];
             sprintf(loadfilebuf, "%s/%s", client_options.copt_loaddir,
                     op->op_load.op_load_file);
             strcpy(op->op_load.op_load_file, loadfilebuf);
-            TRY(result, rpc_write_file(writefd, op), cleanup_ops);
+            TRY(result, rpc_write_file(sockfd, op), cleanup_ops);
         }
     }
     // success
@@ -102,9 +89,6 @@ parse_stdin(int readfd, int writefd)
   cleanup_ops:
     parse_cleanup_ops(ops);
   done:
-    if (!dberror_client_is_fatal(result)) {
-        result = DBSUCCESS;
-    }
     return result;
 }
 
@@ -253,33 +237,83 @@ parse_sockfd(int readfd, int writefd)
 
 static
 int
+parse_stdin_interactive(int sockfd)
+{
+    int result;
+    char *prompt = ">>> ";
+    char *input;
+
+    TRYNULL(result, DBEIOEARLYEOF, input, readline(prompt), done);
+    if (*input) {
+        add_history(input);
+        TRY(result, parse_stdin_string(sockfd, input), cleanup_input);
+    }
+
+    result = 0;
+    goto cleanup_input;
+
+  cleanup_input:
+    free(input);
+  done:
+    return result;
+}
+
+static
+int
 client_interactive(int sockfd)
 {
     int result;
-    bool read_stdin = true;
-    bool read_socket = true;
-    while (keep_running && (read_stdin || read_socket)) {
-        // parse input from client
-        result = parse_stdin(STDIN_FILENO, sockfd);
+    while (keep_running) {
+        result = parse_stdin_interactive(sockfd);
         if (result) {
-            if (client_options.copt_interactive) {
-                DBLOG(result);
+            DBLOG(result);
+            if (!dberror_client_is_fatal(result)) {
+                result = DBSUCCESS;
+                continue;
+            } else {
+                (void) rpc_write_terminate(sockfd);
+                goto done;
             }
-            read_stdin = false;
-            // if stdin is done, send a connection termination message
-            (void) rpc_write_terminate(sockfd);
         }
         // wait for response from server
-        if (client_options.copt_interactive) {
-            printf("\r     \r");
-            fflush(stdout);
-        }
-        result = parse_sockfd(sockfd, STDOUT_FILENO);
-        if (result) {
-            read_socket = false;
-        }
+        //printf("\r     \r");
+        //fflush(stdout);
+        TRY(result, parse_sockfd(sockfd, STDOUT_FILENO), done);
     }
     result = 0;
+    goto done;
+  done:
+    return result;
+}
+
+static
+int
+parse_stdin_batch(int sockfd)
+{
+    int result;
+    char buf[TUPLELEN];
+    bzero(buf, TUPLELEN);
+    result = 0;
+    unsigned ix = 0;
+    while (1) {
+        result = read(STDIN_FILENO, buf + ix, 1);
+        if (result == -1 || result == 0) {
+            result = DBEIOCHECKERRNO;
+            goto done;
+        }
+        ix++;
+        if (buf[ix-1] == '\n' || buf[ix-1] == '\0') {
+            break;
+        }
+    }
+    TRY(result, parse_stdin_string(sockfd, buf), done);
+
+    result = 0;
+    goto done;
+  done:
+    if (!dberror_client_is_fatal(result)) {
+        result = DBSUCCESS;
+    }
     return result;
 }
 
@@ -295,10 +329,6 @@ client_batch(int sockfd)
         FD_ZERO(&readfds);
         if (read_stdin) {
             FD_SET(STDIN_FILENO, &readfds);
-            if (client_options.copt_interactive) {
-                printf(">>> ");
-                fflush(stdout);
-            }
         }
         if (read_socket) {
             FD_SET(sockfd, &readfds);
@@ -312,11 +342,8 @@ client_batch(int sockfd)
 
         // if we get something from stdin, parse it and write it to the socket
         if (read_stdin && FD_ISSET(STDIN_FILENO, &readfds)) {
-            result = parse_stdin(STDIN_FILENO, sockfd);
+            result = parse_stdin_batch(sockfd);
             if (result) {
-                if (client_options.copt_interactive) {
-                    DBLOG(result);
-                }
                 // if stdin is done, send a connection termination message
                 // to the server
                 read_stdin = false;
@@ -326,10 +353,6 @@ client_batch(int sockfd)
 
         // if we get something from the socket, parse it and write it to stdout
         if (read_socket && FD_ISSET(sockfd, &readfds)) {
-            if (client_options.copt_interactive) {
-                printf("\r     \r");
-                fflush(stdout);
-            }
             result = parse_sockfd(sockfd, STDOUT_FILENO);
             if (result) {
                 read_socket = false;
@@ -426,34 +449,11 @@ main(int argc, char **argv)
         goto done;
     }
 
-    /*
-    bool read_stdin = true;
-    bool read_socket = true;
-    while (keep_running && (read_stdin || read_socket)) {
-        // parse input from client
-        result = parse_stdin(STDIN_FILENO, sockfd);
-        if (result) {
-            if (client_options.copt_interactive) {
-                DBLOG(result);
-            }
-            read_stdin = false;
-            // if stdin is done, send a connection termination message
-            (void) rpc_write_terminate(sockfd);
-        }
-        // wait for response from server
-        if (client_options.copt_interactive) {
-            printf("\r     \r");
-            fflush(stdout);
-        }
-        result = parse_sockfd(sockfd, STDOUT_FILENO);
-        if (result) {
-            read_socket = false;
-        }
+    if (client_options.copt_interactive) {
+        result = client_interactive(sockfd);
+    } else {
+        result = client_batch(sockfd);
     }
-    */
-
-    (void) client_interactive(sockfd);
-    result = client_batch(sockfd);
 
   cleanup_sockfd:
     (void) rpc_write_terminate(sockfd);

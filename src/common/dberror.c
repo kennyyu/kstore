@@ -87,6 +87,7 @@ dberror_client_is_fatal(enum dberror result)
     case DBECONNECT:
     case DBESELECT:
     case DBESIGACTION:
+    case DBEIOEARLYEOF:
         return true;
     default:
         return false;
