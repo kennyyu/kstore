@@ -258,6 +258,7 @@ int
 client_interactive(int sockfd)
 {
     int result;
+    rl_getc_function = getc;
     while (keep_running) {
         result = parse_stdin_interactive(sockfd);
         if (result) {
