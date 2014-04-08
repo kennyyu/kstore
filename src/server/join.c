@@ -125,22 +125,22 @@ column_join_sort(struct storage *storage,
     }
     qsort(tuplesR, inputR->cval_len, sizeof(struct idval_tuple), idval_tuple_compare);
 
-    for (unsigned l = 0; l < inputL->cval_len; /* empty */) {
-        for (unsigned r = 0; r < inputR->cval_len; /* empty */) {
-            if (tuplesL[l].idval_val == tuplesR[r].idval_val) {
-                unsigned newl, newr;
-                TRY(result, column_join_sort_repeats(tuplesL, tuplesR, retidsL, retidsR,
-                        inputL->cval_len, inputR->cval_len, l, r, &newl, &newr),
-                    cleanup_tuplesR);
-                l = newl;
-                r = newr;
-                goto restart;
-            }
+    unsigned l = 0, r = 0;
+    while (l < inputL->cval_len && r < inputR->cval_len) {
+        int lval = tuplesL[l].idval_val;
+        int rval = tuplesR[r].idval_val;
+        if (lval < rval) {
+            l++;
+        } else if (lval > rval) {
             r++;
+        } else {
+            unsigned newl, newr;
+            TRY(result, column_join_sort_repeats(tuplesL, tuplesR, retidsL, retidsR,
+                    inputL->cval_len, inputR->cval_len, l, r, &newl, &newr),
+                cleanup_tuplesR);
+            l = newl;
+            r = newr;
         }
-        l++;
-      restart:
-        continue;
     }
 
     // success
