@@ -25,7 +25,7 @@ add_string(struct stringarray *vec, char *query, unsigned start, unsigned end)
     char *line;
     TRYNULL(result, DBENOMEM, line, malloc(sizeof(char) * (end - start + 1)), done);
     memcpy(line, &query[start], end - start);
-    line[end] = '\0';
+    line[end - start] = '\0';
     TRY(result, stringarray_add(vec, line, NULL), cleanup_malloc);
     result = 0;
     goto done;
@@ -76,6 +76,7 @@ parse_line(char *line)
 {
     int result;
     struct op *op;
+    char *s;
     TRYNULL(result, DBENOMEM, op, malloc(sizeof(struct op)), done);
     char stype_buf[16];
 
@@ -88,7 +89,7 @@ parse_line(char *line)
         &op->op_select.op_sel_low,
         &op->op_select.op_sel_high) == 4) {
         op->op_type = OP_SELECT_RANGE_ASSIGN;
-        goto done;
+        goto check_extra_args;
     }
     bzero(op, sizeof(struct op));
     if (sscanf(line, "%[^=]=select(%[^,],%u)",
@@ -96,14 +97,14 @@ parse_line(char *line)
         (char *) &op->op_select.op_sel_col,
         &op->op_select.op_sel_value) == 3) {
         op->op_type = OP_SELECT_VALUE_ASSIGN;
-        goto done;
+        goto check_extra_args;
     }
     bzero(op, sizeof(struct op));
     if (sscanf(line, "%[^=]=select(%[^,)])",
         (char *) &op->op_select.op_sel_var,
         (char *) &op->op_select.op_sel_col) == 2) {
         op->op_type = OP_SELECT_ALL_ASSIGN;
-        goto done;
+        goto check_extra_args;
     }
     bzero(op, sizeof(struct op));
     if (sscanf(line, "select(%[^,],%u,%u)",
@@ -111,20 +112,20 @@ parse_line(char *line)
         &op->op_select.op_sel_low,
         &op->op_select.op_sel_high) == 3) {
         op->op_type = OP_SELECT_RANGE;
-        goto done;
+        goto check_extra_args;
     }
     bzero(op, sizeof(struct op));
     if (sscanf(line, "select(%[^,],%u)",
         (char *) &op->op_select.op_sel_col,
         &op->op_select.op_sel_value) == 2) {
         op->op_type = OP_SELECT_VALUE;
-        goto done;
+        goto check_extra_args;
     }
     bzero(op, sizeof(struct op));
     if (sscanf(line, "select(%[^,)])",
         (char *) &op->op_select.op_sel_col) == 1) {
         op->op_type = OP_SELECT_ALL;
-        goto done;
+        goto check_extra_args;
     }
     bzero(op, sizeof(struct op));
     if (sscanf(line, "%[^=]=fetch(%[^,],%[^)])",
@@ -132,14 +133,14 @@ parse_line(char *line)
         (char *) &op->op_fetch.op_fetch_col,
         (char *) &op->op_fetch.op_fetch_pos) == 3) {
         op->op_type = OP_FETCH_ASSIGN;
-        goto done;
+        goto check_extra_args;
     }
     bzero(op, sizeof(struct op));
     if (sscanf(line, "fetch(%[^,],%[^)])",
         (char *) &op->op_fetch.op_fetch_col,
         (char *) &op->op_fetch.op_fetch_pos) == 2) {
         op->op_type = OP_FETCH;
-        goto done;
+        goto check_extra_args;
     }
     bzero(op, sizeof(struct op));
     if (sscanf(line, "create(%[^,],\"%[^)\"])",
@@ -147,26 +148,26 @@ parse_line(char *line)
         (char *) stype_buf) == 2) {
         op->op_type = OP_CREATE;
         op->op_create.op_create_stype = storage_type_from_string(stype_buf);
-        goto done;
+        goto check_extra_args;
     }
     bzero(op, sizeof(struct op));
     if (sscanf(line, "load(\"%[^)\"])",
         (char *) &op->op_load.op_load_file) == 1) {
         op->op_type = OP_LOAD;
-        goto done;
+        goto check_extra_args;
     }
     bzero(op, sizeof(struct op));
     if (sscanf(line, "insert(%[^,],%u)",
         (char *) &op->op_insert.op_insert_col,
         &op->op_insert.op_insert_val) == 2) {
         op->op_type = OP_INSERT;
-        goto done;
+        goto check_extra_args;
     }
     bzero(op, sizeof(struct op));
     if (sscanf(line, "tuple(%[^)])",
         (char *) &op->op_tuple.op_tuple_vars) == 1) {
         op->op_type = OP_TUPLE;
-        goto done;
+        goto check_extra_args;
     }
     bzero(op, sizeof(struct op));
     if (sscanf(line, "%[^=]=add(%[^,],%[^)])",
@@ -176,7 +177,7 @@ parse_line(char *line)
         op->op_type = OP_MATH;
         op->op_math.op_math_mtype = MATH_ADD;
         op->op_math.op_math_assign = true;
-        goto done;
+        goto check_extra_args;
     }
     bzero(op, sizeof(struct op));
     if (sscanf(line, "add(%[^,],%[^)])",
@@ -185,7 +186,7 @@ parse_line(char *line)
         op->op_type = OP_MATH;
         op->op_math.op_math_mtype = MATH_ADD;
         op->op_math.op_math_assign = false;
-        goto done;
+        goto check_extra_args;
     }
     bzero(op, sizeof(struct op));
     if (sscanf(line, "%[^=]=sub(%[^,],%[^)])",
@@ -195,7 +196,7 @@ parse_line(char *line)
         op->op_type = OP_MATH;
         op->op_math.op_math_mtype = MATH_SUB;
         op->op_math.op_math_assign = true;
-        goto done;
+        goto check_extra_args;
     }
     bzero(op, sizeof(struct op));
     if (sscanf(line, "sub(%[^,],%[^)])",
@@ -204,7 +205,7 @@ parse_line(char *line)
         op->op_type = OP_MATH;
         op->op_math.op_math_mtype = MATH_SUB;
         op->op_math.op_math_assign = false;
-        goto done;
+        goto check_extra_args;
     }
     bzero(op, sizeof(struct op));
     if (sscanf(line, "%[^=]=mul(%[^,],%[^)])",
@@ -214,7 +215,7 @@ parse_line(char *line)
         op->op_type = OP_MATH;
         op->op_math.op_math_mtype = MATH_MUL;
         op->op_math.op_math_assign = true;
-        goto done;
+        goto check_extra_args;
     }
     bzero(op, sizeof(struct op));
     if (sscanf(line, "mul(%[^,],%[^)])",
@@ -223,7 +224,7 @@ parse_line(char *line)
         op->op_type = OP_MATH;
         op->op_math.op_math_mtype = MATH_MUL;
         op->op_math.op_math_assign = false;
-        goto done;
+        goto check_extra_args;
     }
     bzero(op, sizeof(struct op));
     if (sscanf(line, "%[^=]=div(%[^,],%[^)])",
@@ -233,7 +234,7 @@ parse_line(char *line)
         op->op_type = OP_MATH;
         op->op_math.op_math_mtype = MATH_DIV;
         op->op_math.op_math_assign = true;
-        goto done;
+        goto check_extra_args;
     }
     bzero(op, sizeof(struct op));
     if (sscanf(line, "div(%[^,],%[^)])",
@@ -242,7 +243,7 @@ parse_line(char *line)
         op->op_type = OP_MATH;
         op->op_math.op_math_mtype = MATH_DIV;
         op->op_math.op_math_assign = false;
-        goto done;
+        goto check_extra_args;
     }
     bzero(op, sizeof(struct op));
     if (sscanf(line, "%[^=]=min(%[^,)])",
@@ -251,7 +252,7 @@ parse_line(char *line)
         op->op_type = OP_AGG;
         op->op_agg.op_agg_atype = AGG_MIN;
         op->op_agg.op_agg_assign = true;
-        goto done;
+        goto check_extra_args;
     }
     bzero(op, sizeof(struct op));
     if (sscanf(line, "min(%[^,)])",
@@ -259,7 +260,7 @@ parse_line(char *line)
         op->op_type = OP_AGG;
         op->op_agg.op_agg_atype = AGG_MIN;
         op->op_agg.op_agg_assign = false;
-        goto done;
+        goto check_extra_args;
     }
     bzero(op, sizeof(struct op));
     if (sscanf(line, "%[^=]=max(%[^,)])",
@@ -268,7 +269,7 @@ parse_line(char *line)
         op->op_type = OP_AGG;
         op->op_agg.op_agg_atype = AGG_MAX;
         op->op_agg.op_agg_assign = true;
-        goto done;
+        goto check_extra_args;
     }
     bzero(op, sizeof(struct op));
     if (sscanf(line, "max(%[^,)])",
@@ -276,7 +277,7 @@ parse_line(char *line)
         op->op_type = OP_AGG;
         op->op_agg.op_agg_atype = AGG_MAX;
         op->op_agg.op_agg_assign = false;
-        goto done;
+        goto check_extra_args;
     }
     bzero(op, sizeof(struct op));
     if (sscanf(line, "%[^=]=avg(%[^,)])",
@@ -285,7 +286,7 @@ parse_line(char *line)
         op->op_type = OP_AGG;
         op->op_agg.op_agg_atype = AGG_AVG;
         op->op_agg.op_agg_assign = true;
-        goto done;
+        goto check_extra_args;
     }
     bzero(op, sizeof(struct op));
     if (sscanf(line, "avg(%[^,)])",
@@ -293,7 +294,7 @@ parse_line(char *line)
         op->op_type = OP_AGG;
         op->op_agg.op_agg_atype = AGG_AVG;
         op->op_agg.op_agg_assign = false;
-        goto done;
+        goto check_extra_args;
     }
     bzero(op, sizeof(struct op));
     if (sscanf(line, "%[^=]=sum(%[^,)])",
@@ -302,7 +303,7 @@ parse_line(char *line)
         op->op_type = OP_AGG;
         op->op_agg.op_agg_atype = AGG_SUM;
         op->op_agg.op_agg_assign = true;
-        goto done;
+        goto check_extra_args;
     }
     bzero(op, sizeof(struct op));
     if (sscanf(line, "sum(%[^,)])",
@@ -310,7 +311,7 @@ parse_line(char *line)
         op->op_type = OP_AGG;
         op->op_agg.op_agg_atype = AGG_SUM;
         op->op_agg.op_agg_assign = false;
-        goto done;
+        goto check_extra_args;
     }
     bzero(op, sizeof(struct op));
     if (sscanf(line, "%[^=]=count(%[^,)])",
@@ -319,7 +320,7 @@ parse_line(char *line)
         op->op_type = OP_AGG;
         op->op_agg.op_agg_atype = AGG_COUNT;
         op->op_agg.op_agg_assign = true;
-        goto done;
+        goto check_extra_args;
     }
     bzero(op, sizeof(struct op));
     if (sscanf(line, "count(%[^,)])",
@@ -327,13 +328,13 @@ parse_line(char *line)
         op->op_type = OP_AGG;
         op->op_agg.op_agg_atype = AGG_COUNT;
         op->op_agg.op_agg_assign = false;
-        goto done;
+        goto check_extra_args;
     }
     bzero(op, sizeof(struct op));
     if (sscanf(line, "print(%[^,)])",
         (char *) &op->op_print.op_print_var) == 1) {
         op->op_type = OP_PRINT;
-        goto done;
+        goto check_extra_args;
     }
     bzero(op, sizeof(struct op));
     if (sscanf(line, "%[^=,],%[^=,]=loopjoin(%[^,],%[^)])",
@@ -343,7 +344,7 @@ parse_line(char *line)
         (char *) &op->op_join.op_join_inputR) == 4) {
         op->op_type = OP_JOIN;
         op->op_join.op_join_jtype = JOIN_LOOP;
-        goto done;
+        goto check_extra_args;
     }
     bzero(op, sizeof(struct op));
     if (sscanf(line, "%[^=,],%[^=,]=sortjoin(%[^,],%[^)])",
@@ -353,7 +354,7 @@ parse_line(char *line)
         (char *) &op->op_join.op_join_inputR) == 4) {
         op->op_type = OP_JOIN;
         op->op_join.op_join_jtype = JOIN_SORT;
-        goto done;
+        goto check_extra_args;
     }
     bzero(op, sizeof(struct op));
     if (sscanf(line, "%[^=,],%[^=,]=treejoin(%[^,],%[^)])",
@@ -363,7 +364,7 @@ parse_line(char *line)
         (char *) &op->op_join.op_join_inputR) == 4) {
         op->op_type = OP_JOIN;
         op->op_join.op_join_jtype = JOIN_TREE;
-        goto done;
+        goto check_extra_args;
     }
     bzero(op, sizeof(struct op));
     if (sscanf(line, "%[^=,],%[^=,]=hashjoin(%[^,],%[^)])",
@@ -373,10 +374,17 @@ parse_line(char *line)
         (char *) &op->op_join.op_join_inputR) == 4) {
         op->op_type = OP_JOIN;
         op->op_join.op_join_jtype = JOIN_HASH;
-        goto done;
+        goto check_extra_args;
     }
     goto cleanup_op;
 
+  check_extra_args:
+    s = op_string(op);
+    result = strcmp(s, line);
+    free(s);
+    if (result == 0) {
+        goto done;
+    }
   cleanup_op:
     free(op);
     op = NULL;
