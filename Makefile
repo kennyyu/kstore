@@ -77,7 +77,8 @@ CFLAGS = -Wall -Werror -ggdb -std=gnu99 -m32
 LIBS = -lm -lpthread -lncurses
 
 $(TEST_OBJDIR)/%_test: $(TEST_OBJDIR)/%_test.o $(COMMON_OBJS) $(SERVER_OBJS) $(CLIENT_OBJS)
-	$(CC) -o $@ $^ $(CFLAGS) -I$(COMMON_INCDIR) -I$(SERVER_INCDIR) -I$(CLIENT_INCDIR) $(LIBS)
+	$(CC) -o $@ $^ $(CFLAGS) -I$(COMMON_INCDIR) -I$(SERVER_INCDIR) -I$(CLIENT_INCDIR) \
+		$(COMMON_LIBS) $(SERVER_LIBS) $(CLIENT_LIBS) $(LIBS)
 
 $(TEST_OBJDIR)/%.o: $(TEST_SRCDIR)/%.c $(COMMON_DEPS) $(SERVER_DEPS) $(CLIENT_DEPS)
 	@mkdir -p $(TEST_OBJDIR)
@@ -99,13 +100,13 @@ all: server client
 
 test: server client $(TEST_BINS)
 	@echo
-	@echo ">>> STARTING TESTS"
+	@echo ">>> STARTING UNIT TESTS"
 	@for t in `ls $(TEST_OBJDIR)/*_test`; do \
 		echo "=== running $$t... ==="; \
 		./$$t; \
 		echo "=== finished $$t ==="; \
 	done
-	@echo ">>> TESTS DONE"
+	@echo ">>> UNIT TESTS DONE"
 
 server.o: server.c $(SERVER_DEPS) $(COMMON_OBJS) $(COMMON_DEPS)
 	@mkdir -p $(SERVER_OBJDIR)
