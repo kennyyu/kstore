@@ -11,6 +11,9 @@
 
 #define MIN(a,b) ((a) < (b)) ? (a) : (b)
 
+// We'll use 2^NHASHBITS Buckets
+#define NHASHBITS 6
+
 static
 int
 column_join_loop(struct storage *storage,
@@ -173,8 +176,6 @@ column_join_tree(struct storage *storage,
         DBLOG(result);
         goto cleanup_col;
     }
-    // TODO: require building a tree on the fly because inputR
-    // is a subset of the btree
 
     // For each value in the left column, scan the btree for the value
     struct column_ids *cids = NULL;
@@ -210,6 +211,25 @@ column_join_tree(struct storage *storage,
     return result;
 }
 
+/*
+ * Hash function taken from here:
+ * http://stackoverflow.com/questions/664014/what-integer-hash-function-are-good-that-accepts-an-integer-hash-key
+ */
+static
+unsigned int hash(unsigned int x, unsigned nbits)
+{
+    x = ((x >> 16) ^ x) * 0x45d9f3b;
+    x = ((x >> 16) ^ x) * 0x45d9f3b;
+    x = ((x >> 16) ^ x);
+    unsigned nbitmask = (1 << nbits) - 1;
+    return x & nbitmask;
+}
+
+struct hashentry {
+    int he_val;
+    unsigned he_id;
+};
+
 static
 int
 column_join_hash(struct storage *storage,
@@ -218,7 +238,71 @@ column_join_hash(struct storage *storage,
                  struct column_ids *retidsL,
                  struct column_ids *retidsR)
 {
-    return column_join_sort(storage, inputL, inputR, retidsL, retidsR);
+    int result;
+
+    // Use static hashing.
+    // First pass: compute counts for each bucket on right side
+    unsigned nbuckets = 1 << NHASHBITS;
+    unsigned counts[nbuckets];
+    bzero(counts, sizeof(unsigned) * nbuckets);
+    for (unsigned i = 0; i < inputR->cval_len; i++) {
+        unsigned bucket = hash(inputR->cval_vals[i], NHASHBITS);
+        assert(bucket < nbuckets);
+        counts[bucket]++;
+    }
+
+    // Maintain the offsets for where the buckets start.
+    unsigned offsets[nbuckets];
+    bzero(offsets, sizeof(unsigned) * nbuckets);
+    unsigned next = 0;
+    for (unsigned i = 0; i < nbuckets; i++) {
+        offsets[i] = next;
+        next += counts[i];
+    }
+    assert(next == inputR->cval_len);
+
+    // Maintain current offsets for where to insert the next entry
+    // into bucket.
+    unsigned insertions[nbuckets];
+    memcpy(insertions, offsets, sizeof(unsigned) * nbuckets);
+
+    // Second pass: actually create our hash table
+    struct hashentry *hashtable;
+    TRYNULL(result, DBENOMEM, hashtable,
+            malloc(sizeof(struct hashentry) * inputR->cval_len), done);
+    bzero(hashtable, sizeof(struct hashentry) * inputR->cval_len);
+    for (unsigned i = 0; i < inputR->cval_len; i++) {
+        int val = inputR->cval_vals[i];
+        unsigned bucket = hash(val, NHASHBITS);
+        assert(bucket < nbuckets);
+        unsigned insertioni = insertions[bucket]++;
+        assert(insertioni < inputR->cval_len);
+        hashtable[insertioni].he_val = val;
+        hashtable[insertioni].he_id = inputR->cval_ids[i];
+    }
+
+    // For each entry in the left, probe the hashtable
+    for (unsigned i = 0; i < inputL->cval_len; i++) {
+        int val = inputL->cval_vals[i];
+        unsigned bucket = hash(val, NHASHBITS);
+        unsigned offset = offsets[bucket];
+        // Must check the entire bucket for possible duplicate values
+        for (unsigned bucketi = 0; bucketi < counts[bucket]; bucketi++) {
+            unsigned ix = offset + bucketi;
+            if (val == hashtable[ix].he_val) {
+                TRY(result, idarray_add(retidsL->cid_array, (void *) inputL->cval_ids[i], NULL), cleanup_malloc);
+                TRY(result, idarray_add(retidsR->cid_array, (void *) hashtable[ix].he_id, NULL), cleanup_malloc);
+            }
+        }
+    }
+
+    // success
+    result = 0;
+    goto cleanup_malloc;
+  cleanup_malloc:
+    free(hashtable);
+  done:
+    return result;
 }
 
 int
