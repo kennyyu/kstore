@@ -18,24 +18,17 @@
 #include "include/array.h"
 #include "include/results.h"
 
-// 64 bit conversion taken from:
-// http://stackoverflow.com/questions/809902/64-bit-ntohl-in-c
 static
 uint64_t
 ntoh64(const uint64_t input)
 {
-    uint64_t rval;
-    uint8_t *data = (uint8_t *)&rval;
-
-    data[0] = input >> 56;
-    data[1] = input >> 48;
-    data[2] = input >> 40;
-    data[3] = input >> 32;
-    data[4] = input >> 24;
-    data[5] = input >> 16;
-    data[6] = input >> 8;
-    data[7] = input >> 0;
-
+    uint32_t vals[2];
+    vals[0] = (input >> 32) & -1;
+    vals[1] = input & -1;
+    uint32_t rvals[2];
+    rvals[0] = ntohl(vals[0]);
+    rvals[1] = ntohl(vals[1]);
+    uint64_t rval = (uint64_t) rvals[0] << 32 | rvals[1];
     return rval;
 }
 
@@ -43,7 +36,14 @@ static
 uint64_t
 hton64(const uint64_t input)
 {
-    return (ntoh64(input));
+    uint32_t vals[2];
+    vals[0] = (input >> 32) & -1;
+    vals[1] = input & -1;
+    uint32_t rvals[2];
+    rvals[0] = htonl(vals[0]);
+    rvals[1] = htonl(vals[1]);
+    uint64_t rval = (uint64_t) rvals[0] << 32 | rvals[1];
+    return rval;
 }
 
 int
