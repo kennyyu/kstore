@@ -301,11 +301,12 @@ storage_add_column(struct storage *storage, char *colname,
 }
 
 // if not in array, add it and inc ref count
-struct column *
-column_open(struct storage *storage, char *colname)
+int
+column_open(struct storage *storage, char *colname, struct column **retcol)
 {
     assert(storage != NULL);
     assert(colname != NULL);
+    assert(retcol != NULL);
 
     lock_acquire(storage->st_lock);
     int result;
@@ -328,6 +329,8 @@ column_open(struct storage *storage, char *colname)
     bool found = storage_find_column(storage, colname, &freefound,
                                      &colpage, &colindex);
     if (!found) {
+        result = DBECOLEXISTS;
+        DBLOG(result);
         goto done;
     }
     struct column_on_disk colbuf[COLUMNS_PER_PAGE];
@@ -365,6 +368,7 @@ column_open(struct storage *storage, char *colname)
     // finally, add this column to the array of open columns
     TRY(result, columnarray_add(storage->st_open_cols, col, NULL), cleanup_lock);
     result = 0;
+    *retcol = col;
     goto done;
 
   cleanup_lock:
@@ -379,7 +383,7 @@ column_open(struct storage *storage, char *colname)
     col = NULL;
   done:
     lock_release(storage->st_lock);
-    return col;
+    return result;
 }
 
 // dec ref count, close it if 0

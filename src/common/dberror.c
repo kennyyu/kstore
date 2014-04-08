@@ -25,7 +25,7 @@ dberror_string(enum dberror result)
     case DBECONNECT: return "connect error";
     case DBESELECT: return "select error";
     case DBESIGACTION: return "sigaction error";
-    case DBECOLOPEN: return "couldn't open column";
+    case DBECOLEXISTS: return "column doesn't exist";
     case DBELISTEN: return "listen error";
     case DBEBIND: return "bind error";
     case DBEACCEPT: return "accept error";

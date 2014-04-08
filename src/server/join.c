@@ -170,7 +170,7 @@ column_join_tree(struct storage *storage,
 
     // Make sure a Btree exists on the right column
     struct column *col = NULL;
-    TRYNULL(result, DBECOLOPEN, col, column_open(storage, inputR->cval_col), done);
+    TRY(result, column_open(storage, inputR->cval_col, &col), done);
     if (col->col_disk.cd_stype != STORAGE_BTREE) {
         result = DBENOTREE;
         DBLOG(result);

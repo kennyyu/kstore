@@ -164,9 +164,8 @@ server_eval_load(struct server_jobctx *jobctx, struct op *op)
     for (unsigned i = 0; i < csv_resultarray_num(results); i++) {
         struct csv_result *csvheader = csv_resultarray_get(results, i);
         struct column *col;
-        TRYNULL(result, DBECOLOPEN, col,
-                column_open(jobctx->sj_storage, csvheader->csv_colname),
-                cleanup_csv);
+        TRY(result, column_open(jobctx->sj_storage, csvheader->csv_colname, &col),
+            cleanup_csv);
         result = column_load(col, (int *) csvheader->csv_vals->arr.v,
                              intarray_num(csvheader->csv_vals));
         if (result) {
@@ -279,9 +278,7 @@ server_eval_select(struct server_jobctx *jobctx, struct op *op)
            && op->op_type <= OP_SELECT_RANGE);
     int result;
     struct column *col;
-    TRYNULL(result, DBECOLOPEN, col,
-            column_open(jobctx->sj_storage, op->op_select.op_sel_col),
-            done);
+    TRY(result, column_open(jobctx->sj_storage, op->op_select.op_sel_col, &col), done);
     struct column_ids *ids;
     TRYNULL(result, DBECOLSELECT, ids, column_select(col, op), cleanup_col);
 
@@ -324,9 +321,7 @@ server_eval_fetch(struct server_jobctx *jobctx, struct op *op)
     assert(op->op_type == OP_FETCH || op->op_type == OP_FETCH_ASSIGN);
     int result;
     struct column *col;
-    TRYNULL(result, DBECOLOPEN, col,
-            column_open(jobctx->sj_storage, op->op_fetch.op_fetch_col),
-            done);
+    TRY(result, column_open(jobctx->sj_storage, op->op_fetch.op_fetch_col, &col), done);
     // find the variable representing the positions
     struct vartuple *v;
     TRYNULL(result, DBENOVAR, v,
@@ -500,9 +495,7 @@ server_eval_insert(struct server_jobctx *jobctx, struct op *op)
 
     int result;
     struct column *col;
-    TRYNULL(result, DBECOLOPEN, col,
-            column_open(jobctx->sj_storage, op->op_insert.op_insert_col),
-            done);
+    TRY(result, column_open(jobctx->sj_storage, op->op_insert.op_insert_col, &col), done);
     TRY(result, column_insert(col, op->op_insert.op_insert_val), done);
 
     // success
@@ -717,7 +710,11 @@ server_routine(void *arg, unsigned threadnum)
             break;
         }
         assert(result == 0);
-        TRY(result, rpc_write_ok(clientfd), cleanup_op);
+        result = rpc_write_ok(clientfd);
+        if (result) {
+            goto cleanup_op;
+        }
+        free(op);
         continue;
 
       cleanup_op:

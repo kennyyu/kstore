@@ -83,7 +83,7 @@ int storage_add_column(struct storage *storage, char *colname,
                        enum storage_type stype);
 
 // if not in array, add it and inc ref count
-struct column *column_open(struct storage *storage, char *colname);
+int column_open(struct storage *storage, char *colname, struct column **retcol);
 
 // dec ref count, close it if 0
 void column_close(struct column *col);
