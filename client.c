@@ -239,10 +239,13 @@ parse_stdin_interactive(int sockfd)
     char *input;
 
     TRYNULL(result, DBEIOEARLYEOF, input, readline(prompt), done);
-    if (*input) {
-        add_history(input);
-        TRY(result, parse_stdin_string(sockfd, input), cleanup_input);
+    if (input[0] == '\0' || input[0] == '\n' || input[0] == '\r') {
+        result = DBEPARSE;
+        DBLOG(result);
+        goto cleanup_input;
     }
+    add_history(input);
+    TRY(result, parse_stdin_string(sockfd, input), cleanup_input);
 
     result = 0;
     goto cleanup_input;
