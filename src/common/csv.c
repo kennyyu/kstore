@@ -7,6 +7,7 @@
 #include "include/csv.h"
 #include "include/array.h"
 #include "include/dberror.h"
+#include "include/try.h"
 
 DEFARRAY_BYTYPE(intarray, int, /* no inline */);
 
@@ -37,18 +38,12 @@ csv_parse(int fd)
     result = lseek(fd, 0, SEEK_SET);
     if (result) {
         result = DBELSEEK;
+        DBLOG(result);
         goto done;
     }
-    FILE *file = fdopen(fd, "r");
-    if (file == NULL) {
-        result = DBEIONOFILE;
-        goto done;
-    }
-    results = csv_resultarray_create();
-    if (results == NULL) {
-        result = DBENOMEM;
-        goto cleanup_file;
-    }
+    FILE *file;
+    TRYNULL(result, DBEIONOFILE, file, fdopen(fd, "r"), done);
+    TRYNULL(result, DBENOMEM, results, csv_resultarray_create(), cleanup_file);
 
     char buf[BUFSIZE];
     bzero(buf, BUFSIZE);
@@ -57,21 +52,10 @@ csv_parse(int fd)
     while ((c = fgetc(file)) != EOF) {
         if (c == '\n' || c == ',') {
             buf[ix] = '\0';
-            struct csv_result *header = malloc(sizeof(struct csv_result));
-            if (header == NULL) {
-                result = DBENOMEM;
-                goto free_csv_resultarray;
-            }
-            header->csv_vals = intarray_create();
-            if (header->csv_vals == NULL) {
-                result = DBENOMEM;
-                goto free_csv_resultarray;
-            }
-            result = csv_resultarray_add(results, header, NULL);
-            if (result) {
-                result = DBENOMEM;
-                goto free_csv_resultarray;
-            }
+            struct csv_result *header;
+            TRYNULL(result, DBENOMEM, header, malloc(sizeof(struct csv_result)), free_csv_resultarray);
+            TRYNULL(result, DBENOMEM, header->csv_vals, intarray_create(), free_csv_resultarray);
+            TRY(result, csv_resultarray_add(results, header, NULL), free_csv_resultarray);
             strcpy(header->csv_colname, buf);
             ix = 0;
             bzero(buf, BUFSIZE);
@@ -84,6 +68,7 @@ csv_parse(int fd)
     }
     if (c == EOF) {
         result = DBEIOEARLYEOF;
+        DBLOG(result);
         goto free_csv_resultarray;
     }
 
@@ -95,10 +80,7 @@ csv_parse(int fd)
             buf[ix] = '\0';
             int val = atoi(buf);
             struct csv_result *header = csv_resultarray_get(results, colnum);
-            result = intarray_add(header->csv_vals, (void *) val, NULL);
-            if (result) {
-                goto free_csv_resultarray;
-            }
+            TRY(result, intarray_add(header->csv_vals, (void *) val, NULL), free_csv_resultarray);
             ix = 0;
             bzero(buf, BUFSIZE);
             if (c == '\n') {
