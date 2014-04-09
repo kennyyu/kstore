@@ -82,7 +82,10 @@ csv_parse(int fd)
             buf[ix++] = c;
         }
     }
-    assert(c != EOF);
+    if (c == EOF) {
+        result = DBEIOEARLYEOF;
+        goto free_csv_resultarray;
+    }
 
     // loop until we have no more rows
     ix = 0;
