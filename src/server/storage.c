@@ -683,13 +683,13 @@ btree_insert_helper(struct file *f,
     }
 
     // Propagate the new entry back to the caller to be inserted into the
-    // parent node.
+    // parent node. We propagate the maximum entry in this node.
     bzero(&entrybuf, sizeof(struct btree_entry));
     switch (current->bt_header.bth_type) {
     case BTREE_NODE_LEAF:
         // if we are a leaf node, we must propagate a copy of the
         // key up and maintain another copy at this level
-        entrybuf.bte_key = nodebuf.bt_entries[0].bte_key;
+        entrybuf.bte_key = nodebuf.bt_entries[nodebuf.bt_header.bth_nentries - 1].bte_key;
         entrybuf.bte_page = newpage;
         break;
     case BTREE_NODE_INTERNAL:
