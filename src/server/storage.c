@@ -550,17 +550,27 @@ btree_search(struct column *col, int val,
     return result;
 }
 
+enum insertion_type {
+    BTREE_UPPER_BOUND,
+    BTREE_LOWER_BOUND,
+};
+
 static
 int
 btree_insert_entry(struct file *f,
                    struct btree_node *current,
-                   struct btree_entry *entry)
+                   struct btree_entry *entry,
+                   enum insertion_type intype)
 {
     assert(current != NULL);
     unsigned nentries = current->bt_header.bth_nentries;
     assert(nentries < BTENTRY_PER_PAGE);
 
-    unsigned ix = binary_search(entry, current->bt_entries, nentries,
+    struct btree_entry temp_entry = *entry;
+    //if (intype == BTREE_UPPER_BOUND) {
+    //    temp_entry.bte_key++;
+    //}
+    unsigned ix = binary_search(&temp_entry, current->bt_entries, nentries,
                                 sizeof(struct btree_entry),
                                 btree_entry_compare);
     if (ix < nentries) {
@@ -595,13 +605,17 @@ btree_insert_helper(struct file *f,
     bzero(&entrybuf, sizeof(struct btree_entry));
     struct btree_node nodebuf;
     bzero(&nodebuf, sizeof(struct btree_node));
+    enum insertion_type intype = BTREE_UPPER_BOUND;
 
     // If we have an internal node, recurse down until we can insert entry.
     // Each invocation will possibly propagate up to the caller a new
     // entry to insert into the current node.
     if (current->bt_header.bth_type == BTREE_NODE_INTERNAL) {
         assert(current->bt_header.bth_nentries != 0);
-        unsigned ix = binary_search(entry,
+        // Find lower bound of key + 1
+        struct btree_entry temp_entry = *entry;
+        temp_entry.bte_key++;
+        unsigned ix = binary_search(&temp_entry,
                                     current->bt_entries,
                                     current->bt_header.bth_nentries,
                                     sizeof(struct btree_entry),
@@ -626,12 +640,13 @@ btree_insert_helper(struct file *f,
         }
         // Otherwise, we need to insert the new entry into the current node
         entry = &entrybuf;
+        intype = BTREE_UPPER_BOUND;
     }
 
     // If we have space in this node, insert it.
     unsigned nentries = current->bt_header.bth_nentries;
     if (nentries < BTENTRY_PER_PAGE) {
-        result = btree_insert_entry(f, current, entry);
+        result = btree_insert_entry(f, current, entry, intype);
         assert(result == 0);
         bzero(&entrybuf, sizeof(struct btree_entry));
         goto success;
@@ -675,10 +690,10 @@ btree_insert_helper(struct file *f,
     // If the entry to be inserted is geq than the smallest key
     // in the new right node, the entry should be inserted into that node.
     if (btree_entry_compare(entry, &nodebuf.bt_entries[0]) >= 0) {
-        result = btree_insert_entry(f, &nodebuf, entry);
+        result = btree_insert_entry(f, &nodebuf, entry, intype);
         assert(result == 0);
     } else {
-        result = btree_insert_entry(f, current, entry);
+        result = btree_insert_entry(f, current, entry, intype);
         assert(result == 0);
     }
 
@@ -689,7 +704,7 @@ btree_insert_helper(struct file *f,
     case BTREE_NODE_LEAF:
         // if we are a leaf node, we must propagate a copy of the
         // key up and maintain another copy at this level
-        entrybuf.bte_key = nodebuf.bt_entries[nodebuf.bt_header.bth_nentries - 1].bte_key;
+        entrybuf.bte_key = nodebuf.bt_entries[0].bte_key;
         entrybuf.bte_page = newpage;
         break;
     case BTREE_NODE_INTERNAL:
