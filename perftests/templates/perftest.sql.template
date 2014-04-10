@@ -1,0 +1,49 @@
+CREATE DATABASE IF NOT EXISTS p3_30798260_perf;
+USE p3_30798260_perf;
+
+DROP TABLE IF EXISTS r;
+
+CREATE TABLE r (
+ra INT NOT NULL,
+rc INT NOT NULL,
+rd INT NOT NULL);
+
+CREATE INDEX rc_index ON r (rc) USING BTREE;
+
+DROP TABLE IF EXISTS s;
+
+CREATE TABLE s (
+sa INT NOT NULL,
+sf INT NOT NULL,
+sg INT NOT NULL);
+
+CREATE INDEX sf_index ON s (sf) USING BTREE;
+CREATE INDEX sa_index ON s (sa) USING BTREE;
+
+LOAD DATA LOCAL INFILE '{{ RFILE }}' INTO TABLE r
+FIELDS TERMINATED BY ',' ENCLOSED BY '"'
+LINES TERMINATED BY '\n'
+IGNORE 1 LINES
+(ra, rc, rd);
+
+LOAD DATA LOCAL INFILE '{{ SFILE }}' INTO TABLE s
+FIELDS TERMINATED BY ',' ENCLOSED BY '"'
+LINES TERMINATED BY '\n'
+IGNORE 1 LINES
+(sa, sf, sg);
+
+SELECT COUNT(r.rc)
+FROM r
+WHERE r.rc >= 1 and r.rc <= 9;
+
+SELECT COUNT(s.sf)
+FROM s
+WHERE s.sf >= 31 and s.sf <= 99;
+
+SELECT MAX(r.rd), MIN(s.sg), COUNT(r.rd), COUNT(s.sg)
+FROM r,s
+WHERE r.ra = s.sa
+    AND r.rc >= 1
+    AND r.rc <= 9
+    AND s.sf >= 31
+    AND s.sf <= 99;
