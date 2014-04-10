@@ -626,18 +626,33 @@ btree_insert_helper(struct file *f,
         }
         // Otherwise, we need to insert the new entry into the current node
         entry = &entrybuf;
-    }
 
-    // If we have space in this node, insert it.
-    unsigned nentries = current->bt_header.bth_nentries;
-    if (nentries < BTENTRY_PER_PAGE) {
-        result = btree_insert_entry(f, current, entry);
-        assert(result == 0);
-        bzero(&entrybuf, sizeof(struct btree_entry));
-        goto success;
+        // If we have room in this node, then just insert it.
+        unsigned nentries = current->bt_header.bth_nentries;
+        if (nentries < BTENTRY_PER_PAGE) {
+            assert(ix <= nentries);
+            if (ix < nentries) {
+                memmove(&current->bt_entries[ix + 1], &current->bt_entries[ix],
+                        sizeof(struct btree_entry) * (nentries - ix));
+            }
+            current->bt_entries[ix] = entrybuf;
+            current->bt_header.bth_nentries++;
+            result = btree_node_synch(f, current);
+            assert(result == 0);
+            bzero(&entrybuf, sizeof(struct btree_entry));
+            goto success;
+        }
+    } else {
+        if (current->bt_header.bth_nentries < BTENTRY_PER_PAGE) {
+            result = btree_insert_entry(f, current, entry);
+            assert(result == 0);
+            bzero(&entrybuf, sizeof(struct btree_entry));
+            goto success;
+        }
     }
 
     // Otherwise, we need to split and copy half the entries to the new node.
+    unsigned nentries = current->bt_header.bth_nentries;
     bzero(&nodebuf, sizeof(struct btree_node));
     page_t newpage;
     result = file_alloc_page(f, &newpage);
@@ -683,13 +698,13 @@ btree_insert_helper(struct file *f,
     }
 
     // Propagate the new entry back to the caller to be inserted into the
-    // parent node. We propagate the maximum entry in this node.
+    // parent node.
     bzero(&entrybuf, sizeof(struct btree_entry));
     switch (current->bt_header.bth_type) {
     case BTREE_NODE_LEAF:
         // if we are a leaf node, we must propagate a copy of the
         // key up and maintain another copy at this level
-        entrybuf.bte_key = nodebuf.bt_entries[nodebuf.bt_header.bth_nentries - 1].bte_key;
+        entrybuf.bte_key = nodebuf.bt_entries[0].bte_key;
         entrybuf.bte_page = newpage;
         break;
     case BTREE_NODE_INTERNAL:
