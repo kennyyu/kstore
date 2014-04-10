@@ -26,9 +26,9 @@ column_join_loop(struct storage *storage,
 
     unsigned VALS_PER_PAGE = PAGESIZE / sizeof(int);
     for (unsigned iL = 0; iL < inputL->cval_len; iL += VALS_PER_PAGE) {
+        unsigned lmax = MIN(inputL->cval_len, iL + VALS_PER_PAGE);
         for (unsigned iR = 0; iR < inputR->cval_len; iR += VALS_PER_PAGE) {
-            unsigned lmax = iL + MIN(inputL->cval_len - iL, VALS_PER_PAGE);
-            unsigned rmax = iR + MIN(inputR->cval_len - iR, VALS_PER_PAGE);
+            unsigned rmax = MIN(inputR->cval_len, iR + VALS_PER_PAGE);
             for (unsigned l = iL; l < lmax; l++) {
                 for (unsigned r = iR; r < rmax; r++) {
                     if (inputL->cval_vals[l] == inputR->cval_vals[r]) {
