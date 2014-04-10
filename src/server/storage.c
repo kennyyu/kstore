@@ -591,6 +591,7 @@ btree_insert_helper(struct file *f,
     assert(retentry != NULL);
 
     int result = 0;
+    unsigned ix; // pointer to chase for internal nodes
     struct btree_entry entrybuf;
     bzero(&entrybuf, sizeof(struct btree_entry));
     struct btree_node nodebuf;
@@ -601,11 +602,11 @@ btree_insert_helper(struct file *f,
     // entry to insert into the current node.
     if (current->bt_header.bth_type == BTREE_NODE_INTERNAL) {
         assert(current->bt_header.bth_nentries != 0);
-        unsigned ix = binary_search(entry,
-                                    current->bt_entries,
-                                    current->bt_header.bth_nentries,
-                                    sizeof(struct btree_entry),
-                                    btree_entry_compare);
+        ix = binary_search(entry,
+                           current->bt_entries,
+                           current->bt_header.bth_nentries,
+                           sizeof(struct btree_entry),
+                           btree_entry_compare);
         page_t pchild;
         if (ix == 0) { // chase left pointer
             pchild = current->bt_header.bth_left;
@@ -687,14 +688,36 @@ btree_insert_helper(struct file *f,
     memcpy(&nodebuf.bt_entries, base, bytes_tocopy);
     bzero(base, bytes_tocopy);
 
-    // If the entry to be inserted is geq than the smallest key
-    // in the new right node, the entry should be inserted into that node.
-    if (btree_entry_compare(entry, &nodebuf.bt_entries[0]) >= 0) {
-        result = btree_insert_entry(f, &nodebuf, entry);
-        assert(result == 0);
+    // Now insert the entry into the appropriate position in this node
+    if (current->bt_header.bth_type == BTREE_NODE_INTERNAL) {
+        // If we are an internal node, we must insert the new entry
+        // at the position adjacent to the pointer we chased in our recursion.
+        // We need to determine if the desired location is in the right or
+        // left node.
+        unsigned left_nentries = current->bt_header.bth_nentries;
+        if (ix < left_nentries) {
+            memmove(&current->bt_entries[ix + 1], &current->bt_entries[ix],
+                    sizeof(struct btree_entry) * (left_nentries - ix));
+            current->bt_entries[ix] = *entry;
+            current->bt_header.bth_nentries++;
+        } else {
+            unsigned right_nentries = nodebuf.bt_header.bth_nentries;
+            unsigned rightix = ix - left_nentries;
+            memmove(&nodebuf.bt_entries[rightix + 1], &nodebuf.bt_entries[rightix],
+                    sizeof(struct btree_entry) * (right_nentries - rightix));
+            nodebuf.bt_entries[rightix] = *entry;
+            nodebuf.bt_header.bth_nentries++;
+        }
     } else {
-        result = btree_insert_entry(f, current, entry);
-        assert(result == 0);
+        // If the entry to be inserted is geq than the smallest key
+        // in the new right node, the entry should be inserted into that node.
+        if (btree_entry_compare(entry, &nodebuf.bt_entries[0]) >= 0) {
+            result = btree_insert_entry(f, &nodebuf, entry);
+            assert(result == 0);
+        } else {
+            result = btree_insert_entry(f, current, entry);
+            assert(result == 0);
+        }
     }
 
     // Propagate the new entry back to the caller to be inserted into the
