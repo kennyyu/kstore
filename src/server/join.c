@@ -177,17 +177,36 @@ column_join_tree(struct storage *storage,
         goto cleanup_col;
     }
 
-    // For each value in the left column, scan the btree for the value
-    struct column_ids *cids = NULL;
+    // sort our arrays
+    struct idval_tuple *tuplesL = NULL;
+    TRYNULL(result, DBENOMEM, tuplesL,
+            malloc(sizeof(struct idval_tuple) * inputL->cval_len), cleanup_col);
     for (unsigned i = 0; i < inputL->cval_len; i++) {
-        struct op op;
-        bzero(&op, sizeof(struct op));
-        op.op_type = OP_SELECT_VALUE;
-        op.op_select.op_sel_value = inputL->cval_vals[i];
-        strcpy(op.op_select.op_sel_col, inputR->cval_col);
+        tuplesL[i].idval_id = inputL->cval_ids[i];
+        tuplesL[i].idval_val = inputL->cval_vals[i];
+    }
+    qsort(tuplesL, inputL->cval_len, sizeof(struct idval_tuple), idval_tuple_compare);
 
-        TRYNULL(result, DBECOLSELECT, cids, column_select(col, &op), cleanup_cids);
-        unsigned leftid = inputL->cval_ids[i];
+    // For each value in the left column, scan the btree for the value
+    // Maintain what we just searched for to avoid repeated accesses
+    // of the btree
+    struct column_ids *cids = NULL;
+    int prevval;
+    for (unsigned i = 0; i < inputL->cval_len; i++) {
+        int curval = tuplesL[i].idval_val;
+        if (cids == NULL || curval != prevval) {
+            if (cids != NULL) {
+                column_ids_destroy(cids);
+            }
+            struct op op;
+            bzero(&op, sizeof(struct op));
+            op.op_type = OP_SELECT_VALUE;
+            op.op_select.op_sel_value = curval;
+            strcpy(op.op_select.op_sel_col, inputR->cval_col);
+            TRYNULL(result, DBECOLSELECT, cids, column_select(col, &op), cleanup_cids);
+            prevval = curval;
+        }
+        unsigned leftid = tuplesL[i].idval_id;
         struct cid_iterator iter;
         cid_iter_init(&iter, cids);
         while (cid_iter_has_next(&iter)) {
@@ -196,15 +215,15 @@ column_join_tree(struct storage *storage,
             TRY(result, idarray_add(retidsR->cid_array, (void *) rightid, NULL), cleanup_cids);
         }
         cid_iter_cleanup(&iter);
-        column_ids_destroy(cids);
     }
 
     result = 0;
-    goto cleanup_col;
+    goto cleanup_cids;
   cleanup_cids:
     if (cids != NULL) {
         column_ids_destroy(cids);
     }
+    free(tuplesL);
   cleanup_col:
     column_close(col);
   done:

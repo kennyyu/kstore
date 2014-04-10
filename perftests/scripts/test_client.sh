@@ -8,7 +8,7 @@ fi
 
 case "$1" in
     hash | tree | sort | loop)
-        time ../../cs165/client --loaddir=. < perftest_"$1".txt
+        time ../../client --loaddir=. < perftest_"$1".txt
         ;;
     *)
         echo "Usage: ./test_client.sh {hash | tree | sort | loop}"
