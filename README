@@ -4,6 +4,11 @@ CS165 - Column Store
 NOTES
 =====
 
+* When cloning for the first time:
+
+    git submodule init
+    git submodule update
+
 * This **CANNOT** be built on Mac OSX because OSX does not implement the
   `sem_init()` and `sem_destroy()` functions, which I need for
   my threadpool implementation.
