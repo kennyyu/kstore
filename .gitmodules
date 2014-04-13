@@ -1,0 +1,3 @@
+[submodule "pntests"]
+	path = pntests
+	url = git@code.seas.harvard.edu:~kennyyu/cs165-spring-2014/kennyyus-cs165-tests.git
