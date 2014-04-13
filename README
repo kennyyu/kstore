@@ -8,6 +8,8 @@ NOTES
   `sem_init()` and `sem_destroy()` functions, which I need for
   my threadpool implementation.
 
+## PROJECT 2 NOTES
+
 * Since p2test1c.txt inserts (instead of loading)
   values into t1a, t2a, t2c without inserting
   corresponding values into the other columns of that table, then
@@ -15,6 +17,13 @@ NOTES
   p2test1b.txt because there will be rows with extra t1a, t2a, and t2c
   values, breaking the assertion that the selections always return
   the same number of items.
+
+## PROJECT 3 NOTES
+
+* I modified p3test1.txt to perform a full selection on the right column
+  before attempting to perform a treejoin. I require that the right
+  input to a treejoin must be values from a full selection on the
+  original column.
 
 
 Building the client and server
@@ -84,6 +93,7 @@ To run all the end-to-end tests [the server must already be running]:
 Example:
 
     ./test.sh p2tests
+    ./test.sh p3tests
 
 Output:
 
@@ -105,3 +115,61 @@ to store all outputs, and then diff the output against the
 `.expected` files in the `testdir` directory. For outputs
 that return values/tuples in a different order, the script
 will first sort the expected and actual outputs before diffing.
+
+Performance tests
+=================
+
+The performance tests attempt to perform the following query:
+
+    SELECT MAX(r.rd), MIN(s.sg), COUNT(r.rd), COUNT(s.sg)
+    FROM r,s
+    WHERE r.ra = s.sa
+        AND r.rc >= 1
+        AND r.rc <= 9
+        AND s.sf >= 31
+        AND s.sf <= 99;
+
+The perftests/gen.py script will generate workloads. To see the options:
+
+    python -h
+
+    usage: performance test [-h] [--seed SEED] [--rfile RFILE] [--sfile SFILE]
+                            [--numr NUMR] [--nums NUMS] [--amax AMAX]
+                            [--selrater SELRATER] [--selrates SELRATES]
+                            outdir
+
+    positional arguments:
+      outdir               output dir
+
+    optional arguments:
+      -h, --help           show this help message and exit
+      --seed SEED          random generator seed
+      --rfile RFILE        output r csv file
+      --sfile SFILE        output s csv file
+      --numr NUMR          num rows for r
+      --nums NUMS          num rows for s
+      --amax AMAX          max diff a values
+      --selrater SELRATER  selectivity rate r
+      --selrates SELRATES  selectivity rate s
+
+To run the performance tests, first generate a workload:
+
+    cd perftests
+    python gen.py r100000 \
+           --seed=42 \
+           --numr=100000 \
+           --nums=10000 \
+           --amax=1000 \
+           --selrater=0.75 \
+           --selrates=1.0
+
+This will create a r100000 directory, where the r columns will have
+100000 rows, the s columns will have 10000 rows, and the keys
+to span the r.ra = s.sa join will span from 0 to amax. In the
+r500000 will also be sql scripts and test scripts to run and get
+the time to perform the query in mysql and in my database.
+
+    cd r100000
+    ./test_sql.sh # run and time the mysql query
+    ./test_server.sh # start the server, do this in a separate shell
+    ./test_client {hash | client | sort | loop} # perform the join in my db
