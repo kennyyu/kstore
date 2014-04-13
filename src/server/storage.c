@@ -455,6 +455,7 @@ btree_entry_compare(const void *a, const void *b)
 static
 int
 btree_select_range(struct column *col,
+                   int low, int high,
                    page_t pleft, unsigned ixleft,
                    page_t pright, unsigned ixright,
                    struct column_ids *cids)
@@ -483,6 +484,8 @@ btree_select_range(struct column *col,
                 : nodebuf.bt_header.bth_nentries;
         for (/* none */; curix < rightbound; curix++) {
             struct btree_entry *entry = &nodebuf.bt_entries[curix];
+            assert(low <= entry->bte_key);
+            assert(entry->bte_key <= high);
             bitmap_mark(cids->cid_bitmap, entry->bte_index);
         }
         if ((curpage == pright) && (curix == ixright)) {
@@ -661,10 +664,10 @@ btree_insert_helper(struct file *f,
     unsigned halfix = nentries / 2;
     nodebuf.bt_header.bth_type = current->bt_header.bth_type;
     nodebuf.bt_header.bth_page = newpage;
-    current->bt_header.bth_nentries = halfix;
     struct btree_entry *base;
     switch (current->bt_header.bth_type) {
     case BTREE_NODE_LEAF:
+        current->bt_header.bth_nentries = halfix;
         nodebuf.bt_header.bth_nentries = nentries - halfix;
         nodebuf.bt_header.bth_next = current->bt_header.bth_next;
         current->bt_header.bth_next = newpage;
@@ -675,6 +678,7 @@ btree_insert_helper(struct file *f,
         // in the new node
         // we also propagate one of the entries up, no need to maintain
         // another copy at this level
+        current->bt_header.bth_nentries = halfix + 1;
         nodebuf.bt_header.bth_nentries = (nentries - halfix) - 1;
         nodebuf.bt_header.bth_left = current->bt_entries[halfix].bte_page;
         base = &current->bt_entries[halfix + 1];
@@ -831,6 +835,7 @@ column_select_btree(struct column *col, struct op *op,
 
     int result;
     page_t pleft, pright;
+    int low, high;
     unsigned ixleft, ixright;
     switch (op->op_type) {
     case OP_SELECT_ALL:
@@ -842,23 +847,21 @@ column_select_btree(struct column *col, struct op *op,
         goto done;
     case OP_SELECT_RANGE:
     case OP_SELECT_RANGE_ASSIGN:
-        TRY(result, btree_search(col, op->op_select.op_sel_low,
-                                 &pleft, &ixleft), done);
-        TRY(result, btree_search(col, op->op_select.op_sel_high + 1,
-                                 &pright, &ixright), done);
+        low = op->op_select.op_sel_low;
+        high = op->op_select.op_sel_high;
         break;
     case OP_SELECT_VALUE:
     case OP_SELECT_VALUE_ASSIGN:
-        TRY(result, btree_search(col, op->op_select.op_sel_value,
-                                 &pleft, &ixleft), done);
-        TRY(result, btree_search(col, op->op_select.op_sel_value + 1,
-                                 &pright, &ixright), done);
+        low = op->op_select.op_sel_value;
+        high = op->op_select.op_sel_value;
         break;
     default:
         assert(0);
         break;
     }
-    TRY(result, btree_select_range(col, pleft, ixleft, pright, ixright, cids), done);
+    TRY(result, btree_search(col, low, &pleft, &ixleft), done);
+    TRY(result, btree_search(col, high + 1, &pright, &ixright), done);
+    TRY(result, btree_select_range(col, low, high, pleft, ixleft, pright, ixright, cids), done);
 
     // success
     result = 0;
