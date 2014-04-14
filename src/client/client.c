@@ -15,66 +15,101 @@
 #include <sys/select.h>
 #include <sys/stat.h>
 #include <unistd.h>
-#include "src/common/include/rpc.h"
-#include "src/common/include/operators.h"
-#include "src/common/include/parser.h"
-#include "src/common/include/io.h"
-#include "src/common/include/dberror.h"
-#include "src/common/include/try.h"
-#include "src/client/include/client.h"
+#include "../common/include/try.h"
+#include "../common/include/dberror.h"
+#include "../common/include/rpc.h"
+#include "../common/include/operators.h"
+#include "../common/include/parser.h"
+#include "../common/include/io.h"
+#include "../common/include/dberror.h"
+#include "../common/include/try.h"
+#include "include/client.h"
 #include <readline/readline.h>
 #include <readline/history.h>
 
-/*
-// boolean to tell the client to keep looping
-static bool volatile keep_running = true;
+struct client {
+    struct client_options c_opt;
+    int c_sockfd;
+//    volatile bool c_keep_running;
+};
 
 static
 void
 sigint_handler(int sig)
 {
     (void) sig;
-    keep_running = false;
     fprintf(stderr, "Caught shutdown signal, shutting down client...\n");
 }
-*/
 
-#define PORT 5000
-#define HOST "localhost"
-#define LOADDIR "p2tests"
+struct client *
+client_create(struct client_options *options)
+{
+    assert(options != NULL);
 
-/*
-static struct {
-    int copt_port;
-    char copt_host[128];
-    char copt_loaddir[128];
-    int copt_interactive;
-} client_options = {
-    .copt_port = PORT,
-    .copt_interactive = 0,
-    .copt_host = HOST,
-    .copt_loaddir = LOADDIR,
-};
-*/
-struct client_options client_options = {
-    .copt_port = PORT,
-    .copt_interactive = 0,
-    .copt_host = HOST,
-    .copt_loaddir = LOADDIR,
-};
+    int result;
+    struct client *c = NULL;
+    TRYNULL(result, DBENOMEM, c, malloc(sizeof(struct client)), done);
+    memcpy(&c->c_opt, options, sizeof(struct client_options));
 
-const char *short_options = "h";
+    int sockfd;
+    struct addrinfo hints, *servinfo;
 
-const struct option long_options[] = {
-    {"help", no_argument, NULL, 'h'},
-    {"port", required_argument, &client_options.copt_port, 0},
-    {"host", required_argument, NULL, 0},
-    {"loaddir", required_argument,  NULL, 0},
-    {"interactive", no_argument, &client_options.copt_interactive, 1},
-    {NULL, 0, NULL, 0}
-};
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_STREAM;
+    char portbuf[16];
+    sprintf(portbuf, "%d", c->c_opt.copt_port);
+    result = getaddrinfo(c->c_opt.copt_host, portbuf, &hints, &servinfo);
+    if (result != 0) {
+        result = DBEGETADDRINFO;
+        DBLOG(result);
+        goto cleanup_malloc;
+    }
 
-/*
+    // create a socket to connect to the server
+    sockfd = socket(servinfo->ai_family, servinfo->ai_socktype,
+                    servinfo->ai_protocol);
+    if (sockfd == -1) {
+        result = DBESOCKET;
+        DBLOG(result);
+        goto cleanup_malloc;
+    }
+    freeaddrinfo(servinfo);
+
+    // wait for a connection to the server
+    result = connect(sockfd, servinfo->ai_addr, servinfo->ai_addrlen);
+    if (result == -1) {
+        result = DBECONNECT;
+        DBLOG(result);
+        goto cleanup_sockfd;
+    }
+    c->c_sockfd = sockfd;
+
+    // install a SIGINT handler for graceful shutdown
+    struct sigaction sig;
+    sig.sa_handler = sigint_handler;
+    sig.sa_flags = 0;
+    sigemptyset(&sig.sa_mask);
+    result = sigaction( SIGINT, &sig, NULL );
+    if (result == -1) {
+        result = DBESIGACTION;
+        DBLOG(result);
+        goto cleanup_sockfd;
+    }
+    result = 0;
+    goto done;
+
+  cleanup_sockfd:
+    (void) rpc_write_terminate(sockfd);
+    assert(close(sockfd) == 0);
+  cleanup_malloc:
+    free(c);
+    c = NULL;
+  done:
+    return c;
+}
+
+
 #define BUFSIZE 4096
 
 static
@@ -165,9 +200,10 @@ client_handle_tuple(int sockfd, struct rpc_header *msg)
 
 static
 int
-parse_sockfd(int sockfd)
+parse_sockfd(struct client *c)
 {
     int result;
+    int sockfd = c->c_sockfd;
     struct rpc_header msg;
 
     // We keep looping until we get an OK, ERROR, or TERMINATE message
@@ -182,7 +218,7 @@ parse_sockfd(int sockfd)
             result = client_handle_error(sockfd, &msg);
             goto done;
         case RPC_TERMINATE:
-            if (client_options.copt_interactive) {
+            if (c->c_opt.copt_interactive) {
                 fprintf(stderr, "Received TERMINATE from server\n");
             }
             result = DBESERVERTERM;
@@ -217,10 +253,11 @@ parse_sockfd(int sockfd)
 
 static
 int
-parse_stdin_string(int sockfd, char *s)
+parse_stdin_string(struct client *c, char *s)
 {
     int result;
     struct oparray *ops;
+    int sockfd = c->c_sockfd;
     TRYNULL(result, DBEPARSE, ops, parse_query(s), done);
 
     for (unsigned i = 0; i < oparray_num(ops); i++) {
@@ -228,7 +265,7 @@ parse_stdin_string(int sockfd, char *s)
         TRY(result, rpc_write_query(sockfd, op), cleanup_ops);
         if (op->op_type == OP_LOAD) {
             char loadfilebuf[128];
-            sprintf(loadfilebuf, "%s/%s", client_options.copt_loaddir,
+            sprintf(loadfilebuf, "%s/%s", c->c_opt.copt_loaddir,
                     op->op_load.op_load_file);
             strcpy(op->op_load.op_load_file, loadfilebuf);
             TRY(result, rpc_write_file(sockfd, op), cleanup_ops);
@@ -244,7 +281,7 @@ parse_stdin_string(int sockfd, char *s)
 
 static
 int
-parse_stdin_interactive(int sockfd)
+parse_stdin_interactive(struct client *c)
 {
     int result;
     char *prompt = ">>> ";
@@ -257,7 +294,7 @@ parse_stdin_interactive(int sockfd)
         goto cleanup_input;
     }
     add_history(input);
-    TRY(result, parse_stdin_string(sockfd, input), cleanup_input);
+    TRY(result, parse_stdin_string(c, input), cleanup_input);
 
     result = 0;
     goto cleanup_input;
@@ -270,12 +307,13 @@ parse_stdin_interactive(int sockfd)
 
 static
 int
-client_interactive(int sockfd)
+client_interactive(struct client *c)
 {
     int result;
+    int sockfd = c->c_sockfd;
     rl_getc_function = getc;
-    while (keep_running) {
-        result = parse_stdin_interactive(sockfd);
+    while (errno != EINTR) {
+        result = parse_stdin_interactive(c);
         if (result) {
             DBLOG(result);
             if (!dberror_client_is_fatal(result)) {
@@ -286,7 +324,7 @@ client_interactive(int sockfd)
                 goto done;
             }
         }
-        TRY(result, parse_sockfd(sockfd), done);
+        TRY(result, parse_sockfd(c), done);
     }
     result = 0;
     goto done;
@@ -296,7 +334,7 @@ client_interactive(int sockfd)
 
 static
 int
-parse_stdin_batch(int sockfd)
+parse_stdin_batch(struct client *c)
 {
     int result;
     char buf[TUPLELEN];
@@ -314,7 +352,7 @@ parse_stdin_batch(int sockfd)
             break;
         }
     }
-    TRY(result, parse_stdin_string(sockfd, buf), done);
+    TRY(result, parse_stdin_string(c, buf), done);
 
     result = 0;
     goto done;
@@ -327,12 +365,13 @@ parse_stdin_batch(int sockfd)
 
 static
 int
-client_batch(int sockfd)
+client_batch(struct client *c)
 {
     int result;
+    int sockfd = c->c_sockfd;
     bool read_stdin = true;
     bool read_socket = true;
-    while (keep_running && (read_stdin || read_socket)) {
+    while (errno != EINTR && (read_stdin || read_socket)) {
         fd_set readfds;
         FD_ZERO(&readfds);
         if (read_stdin) {
@@ -350,7 +389,7 @@ client_batch(int sockfd)
 
         // if we get something from stdin, parse it and write it to the socket
         if (read_stdin && FD_ISSET(STDIN_FILENO, &readfds)) {
-            result = parse_stdin_batch(sockfd);
+            result = parse_stdin_batch(c);
             if (result) {
                 // if stdin is done, send a connection termination message
                 // to the server
@@ -361,7 +400,7 @@ client_batch(int sockfd)
 
         // if we get something from the socket, parse it and write it to stdout
         if (read_socket && FD_ISSET(sockfd, &readfds)) {
-            result = parse_sockfd(sockfd);
+            result = parse_sockfd(c);
             if (result) {
                 read_socket = false;
             }
@@ -372,118 +411,29 @@ client_batch(int sockfd)
   done:
     return result;
 }
-*/
 
 int
-main(int argc, char **argv)
+client_listen(struct client *c)
 {
-    while (1) {
-        int option_index;
-        int c = getopt_long(argc, argv, short_options,
-                           long_options, &option_index);
-        if (c == -1) {
-            break;
-        }
-        switch (c) {
-        case 0:
-            if (optarg) {
-                if (strcmp(long_options[option_index].name, "host") == 0) {
-                    strcpy(client_options.copt_host, optarg);
-                } else if (strcmp(long_options[option_index].name, "loaddir") == 0) {
-                    strcpy(client_options.copt_loaddir, optarg);
-                } else {
-                    *(long_options[option_index].flag) = atoi(optarg);
-                }
-            }
-            break;
-        case 'h':
-            printf("Usage: %s\n", argv[0]);
-            printf("--help -h\n");
-            printf("--port P         [default=5000]\n");
-            printf("--host H         [default=localhost]\n");
-            printf("--loaddir dir    [default=p2tests]\n");
-            printf("--interactive\n");
-            return 0;
-        }
-    }
-    if (client_options.copt_interactive) {
-        printf("port: %d, host: %s, loaddir: %s, interactive: %d\n",
-               client_options.copt_port, client_options.copt_host,
-               client_options.copt_loaddir, client_options.copt_interactive);
-    }
-
-    int result;
-    struct client *c;
-    TRYNULL(result, DBENOMEM, c, client_create(&client_options), done);
-    TRY(result, client_listen(c), cleanup_client);
-  cleanup_client:
-    client_destroy(c);
-  done:
-    return result;
-
-    /*
-    int result;
-    int sockfd;
-    struct addrinfo hints, *servinfo;
-
-    memset(&hints, 0, sizeof(hints));
-    hints.ai_family = AF_UNSPEC;
-    hints.ai_socktype = SOCK_STREAM;
-    char portbuf[16];
-    sprintf(portbuf, "%d", client_options.copt_port);
-    result = getaddrinfo(client_options.copt_host, portbuf, &hints, &servinfo);
-    if (result != 0) {
-        result = DBEGETADDRINFO;
-        DBLOG(result);
-        goto done;
-    }
-
-    // create a socket to connect to the server
-    sockfd = socket(servinfo->ai_family, servinfo->ai_socktype,
-                    servinfo->ai_protocol);
-    if (sockfd == -1) {
-        result = DBESOCKET;
-        DBLOG(result);
-        goto done;
-    }
-    freeaddrinfo(servinfo);
-
-    // wait for a connection to the server
-    result = connect(sockfd, servinfo->ai_addr, servinfo->ai_addrlen);
-    if (result == -1) {
-        result = DBECONNECT;
-        DBLOG(result);
-        goto cleanup_sockfd;
-    }
-
-    // install a SIGINT handler for graceful shutdown
-    struct sigaction sig;
-    sig.sa_handler = sigint_handler;
-    sig.sa_flags = 0;
-    sigemptyset( &sig.sa_mask );
-    result = sigaction( SIGINT, &sig, NULL );
-    if (result == -1) {
-        result = DBESIGACTION;
-        DBLOG(result);
-        goto done;
-    }
-
+    assert(c != NULL);
     // Start a client in batch or interactive mode
-    if (client_options.copt_interactive) {
-        result = client_interactive(sockfd);
+    int result;
+    if (c->c_opt.copt_interactive) {
+        result = client_interactive(c);
     } else {
-        result = client_batch(sockfd);
+        result = client_batch(c);
     }
     if (result) {
         DBLOG(result);
-        goto cleanup_sockfd;
     }
-    result = 0;
-
-  cleanup_sockfd:
-    (void) rpc_write_terminate(sockfd);
-    assert(close(sockfd) == 0);
-  done:
     return result;
-    */
+}
+
+void
+client_destroy(struct client *c)
+{
+    assert(c != NULL);
+    (void) rpc_write_terminate(c->c_sockfd);
+    assert(close(c->c_sockfd) == 0);
+    free(c);
 }
