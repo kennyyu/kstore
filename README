@@ -9,10 +9,6 @@ NOTES
     git submodule init
     git submodule update
 
-* This **CANNOT** be built on Mac OSX because OSX does not implement the
-  `sem_init()` and `sem_destroy()` functions, which I need for
-  my threadpool implementation.
-
 ## PROJECT 2 NOTES
 
 * Since p2test1c.txt inserts (instead of loading)
