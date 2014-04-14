@@ -34,6 +34,8 @@ SERVER = server
 CLIENT = client
 COMMON = common
 
+UNAME := $(shell uname)
+
 TEST_SRCDIR = test
 TEST_OBJDIR = testbin
 
@@ -49,9 +51,9 @@ SERVER_OBJDIR = $(OBJDIR)/$(SERVER)
 CLIENT_OBJDIR = $(OBJDIR)/$(CLIENT)
 COMMON_OBJDIR = $(OBJDIR)/$(COMMON)
 
-SERVER_LIBDIR = $(SRCDIR)/$(SERVER)/$(LIBDIR)
-CLIENT_LIBDIR = $(SRCDIR)/$(CLIENT)/$(LIBDIR)
-COMMON_LIBDIR = $(SRCDIR)/$(COMMON)/$(LIBDIR)
+SERVER_LIBDIR = $(SRCDIR)/$(SERVER)/$(LIBDIR)/$(UNAME)
+CLIENT_LIBDIR = $(SRCDIR)/$(CLIENT)/$(LIBDIR)/$(UNAME)
+COMMON_LIBDIR = $(SRCDIR)/$(COMMON)/$(LIBDIR)/$(UNAME)
 
 SERVER_DEPS = $(wildcard $(SERVER_INCDIR)/*.h)
 SERVER_SRCS = $(wildcard $(SERVER_SRCDIR)/*.c)
@@ -77,13 +79,13 @@ CFLAGS = -Wall -Werror -ggdb -std=gnu99 -m32
 LIBS = -lm -lpthread -lncurses
 
 # For OSX, assume readline already installed
-UNAME := $(shell uname)
-ifeq ($(UNAME), Darwin)
-	CLIENT_LIBS =
-	COMMON_LIBS =
-	SERVER_LIBS =
-	LIBS += -lreadline
-endif
+#UNAME := $(shell uname)
+#ifeq ($(UNAME), Darwin)
+#	CLIENT_LIBS = /usr/local/opt/readline/lib/*.a
+#	COMMON_LIBS =
+#	SERVER_LIBS =
+#	LIBS +=
+#endif
 
 $(TEST_OBJDIR)/%_test: $(TEST_OBJDIR)/%_test.o $(COMMON_OBJS) $(SERVER_OBJS) $(CLIENT_OBJS)
 	$(CC) -o $@ $^ $(CFLAGS) -I$(COMMON_INCDIR) -I$(SERVER_INCDIR) -I$(CLIENT_INCDIR) \
