@@ -32,7 +32,7 @@ const struct option long_options[] = {
 };
 
 static
-void
+int
 parse_options(int argc, char **argv)
 {
     while (1) {
@@ -55,22 +55,25 @@ parse_options(int argc, char **argv)
         case 'h':
             printf("Usage: %s\n", argv[0]);
             printf("--help -h\n");
-            printf("--port P        [default=%d]\n", PORT);
-            printf("--backlog B     [default=%d]\n", BACKLOG);
-            printf("--nthreads T    [default=%d]\n", NTHREADS);
-            printf("--dbdir dir     [default=%s]\n", DBDIR);
-            return;
+            printf("--port P         [default=%d]\n", PORT);
+            printf("--backlog B      [default=%d]\n", BACKLOG);
+            printf("--nthreads T     [default=%d]\n", NTHREADS);
+            printf("--dbdir dir      [default=%s]\n", DBDIR);
+            return 1;
         }
     }
     printf("port: %d, backlog: %d, nthreads: %d, dbdir: %s\n",
             server_options.sopt_port, server_options.sopt_backlog,
             server_options.sopt_nthreads, server_options.sopt_dbdir);
+    return 0;
 }
 
 int
 main(int argc, char **argv)
 {
-    parse_options(argc, argv);
+    if (parse_options(argc, argv) != 0) {
+        return 0;
+    }
 
     int result;
     struct server *s;

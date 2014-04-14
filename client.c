@@ -30,7 +30,7 @@ const struct option long_options[] = {
 };
 
 static
-void
+int
 parse_options(int argc, char **argv)
 {
     while (1) {
@@ -59,7 +59,7 @@ parse_options(int argc, char **argv)
             printf("--host H         [default=%s]\n", HOST);
             printf("--loaddir dir    [default=%s]\n", LOADDIR);
             printf("--interactive\n");
-            return;
+            return 1;
         }
     }
     if (client_options.copt_interactive) {
@@ -67,12 +67,15 @@ parse_options(int argc, char **argv)
                client_options.copt_port, client_options.copt_host,
                client_options.copt_loaddir, client_options.copt_interactive);
     }
+    return 0;
 }
 
 int
 main(int argc, char **argv)
 {
-    parse_options(argc, argv);
+    if (parse_options(argc, argv) != 0) {
+        return 0;
+    }
 
     int result;
     struct client *c;
