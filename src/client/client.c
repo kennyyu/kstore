@@ -41,75 +41,6 @@ sigint_handler(int sig)
     fprintf(stderr, "Caught shutdown signal, shutting down client...\n");
 }
 
-struct client *
-client_create(struct client_options *options)
-{
-    assert(options != NULL);
-
-    int result;
-    struct client *c = NULL;
-    TRYNULL(result, DBENOMEM, c, malloc(sizeof(struct client)), done);
-    memcpy(&c->c_opt, options, sizeof(struct client_options));
-
-    int sockfd;
-    struct addrinfo hints, *servinfo;
-
-    memset(&hints, 0, sizeof(hints));
-    hints.ai_family = AF_UNSPEC;
-    hints.ai_socktype = SOCK_STREAM;
-    char portbuf[16];
-    sprintf(portbuf, "%d", c->c_opt.copt_port);
-    result = getaddrinfo(c->c_opt.copt_host, portbuf, &hints, &servinfo);
-    if (result != 0) {
-        result = DBEGETADDRINFO;
-        DBLOG(result);
-        goto cleanup_malloc;
-    }
-
-    // create a socket to connect to the server
-    sockfd = socket(servinfo->ai_family, servinfo->ai_socktype,
-                    servinfo->ai_protocol);
-    if (sockfd == -1) {
-        result = DBESOCKET;
-        DBLOG(result);
-        goto cleanup_malloc;
-    }
-    freeaddrinfo(servinfo);
-
-    // wait for a connection to the server
-    result = connect(sockfd, servinfo->ai_addr, servinfo->ai_addrlen);
-    if (result == -1) {
-        result = DBECONNECT;
-        DBLOG(result);
-        goto cleanup_sockfd;
-    }
-    c->c_sockfd = sockfd;
-
-    // install a SIGINT handler for graceful shutdown
-    struct sigaction sig;
-    sig.sa_handler = sigint_handler;
-    sig.sa_flags = 0;
-    sigemptyset(&sig.sa_mask);
-    result = sigaction( SIGINT, &sig, NULL );
-    if (result == -1) {
-        result = DBESIGACTION;
-        DBLOG(result);
-        goto cleanup_sockfd;
-    }
-    result = 0;
-    goto done;
-
-  cleanup_sockfd:
-    (void) rpc_write_terminate(sockfd);
-    assert(close(sockfd) == 0);
-  cleanup_malloc:
-    free(c);
-    c = NULL;
-  done:
-    return c;
-}
-
-
 #define BUFSIZE 4096
 
 static
@@ -410,6 +341,74 @@ client_batch(struct client *c)
     goto done;
   done:
     return result;
+}
+
+struct client *
+client_create(struct client_options *options)
+{
+    assert(options != NULL);
+
+    int result;
+    struct client *c = NULL;
+    TRYNULL(result, DBENOMEM, c, malloc(sizeof(struct client)), done);
+    memcpy(&c->c_opt, options, sizeof(struct client_options));
+
+    int sockfd;
+    struct addrinfo hints, *servinfo;
+
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_STREAM;
+    char portbuf[16];
+    sprintf(portbuf, "%d", c->c_opt.copt_port);
+    result = getaddrinfo(c->c_opt.copt_host, portbuf, &hints, &servinfo);
+    if (result != 0) {
+        result = DBEGETADDRINFO;
+        DBLOG(result);
+        goto cleanup_malloc;
+    }
+
+    // create a socket to connect to the server
+    sockfd = socket(servinfo->ai_family, servinfo->ai_socktype,
+                    servinfo->ai_protocol);
+    if (sockfd == -1) {
+        result = DBESOCKET;
+        DBLOG(result);
+        goto cleanup_malloc;
+    }
+    freeaddrinfo(servinfo);
+
+    // wait for a connection to the server
+    result = connect(sockfd, servinfo->ai_addr, servinfo->ai_addrlen);
+    if (result == -1) {
+        result = DBECONNECT;
+        DBLOG(result);
+        goto cleanup_sockfd;
+    }
+    c->c_sockfd = sockfd;
+
+    // install a SIGINT handler for graceful shutdown
+    struct sigaction sig;
+    sig.sa_handler = sigint_handler;
+    sig.sa_flags = 0;
+    sigemptyset(&sig.sa_mask);
+    result = sigaction( SIGINT, &sig, NULL );
+    if (result == -1) {
+        result = DBESIGACTION;
+        DBLOG(result);
+        goto cleanup_sockfd;
+    }
+    result = 0;
+    goto done;
+
+  cleanup_sockfd:
+    (void) rpc_write_terminate(sockfd);
+    assert(close(sockfd) == 0);
+  cleanup_malloc:
+    free(c);
+    c = NULL;
+  done:
+    return c;
 }
 
 int
