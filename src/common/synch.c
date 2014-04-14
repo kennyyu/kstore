@@ -52,18 +52,31 @@ lock_release(struct lock *lk)
 }
 
 struct semaphore {
+#ifdef __APPLE__
+    sem_t *sm_sem;
+#else
     sem_t sm_sem;
+#endif
 };
 
 struct semaphore *
 semaphore_create(unsigned int count)
 {
+    int result;
     struct semaphore *sem = malloc(sizeof(struct semaphore));
     if (sem == NULL) {
         goto done;
     }
-    int result = sem_init(&sem->sm_sem, 0 /* not shared between procs */,
-                          count);
+#ifdef __APPLE__
+    sem->sm_sem = sem_open("/cs165/threadpool_sem/", O_CREAT, S_IRWXU, 0);
+    if (sem->sm_sem == NULL) {
+        result = -1;
+        goto cleanup_sem;
+    }
+#else
+    result = sem_init(&sem->sm_sem, 0 /* not shared between procs */,
+                      count);
+#endif
     if (result == -1) {
         goto cleanup_sem;
     }
@@ -80,19 +93,31 @@ void
 semaphore_destroy(struct semaphore *sem)
 {
     assert(sem != NULL);
+#ifdef __APPLE__
+    assert(sem_close(sem->sm_sem) == 0);
+#else
     assert(sem_destroy(&sem->sm_sem) == 0);
+#endif
     free(sem);
 }
 
 void P(struct semaphore *sem)
 {
     assert(sem != NULL);
+#ifdef __APPLE__
+    assert(sem_wait(sem->sm_sem) == 0);
+#else
     assert(sem_wait(&sem->sm_sem) == 0);
+#endif
 }
 
 void V(struct semaphore *sem) {
     assert(sem != NULL);
+#ifdef __APPLE__
+    assert(sem_post(sem->sm_sem) == 0);
+#else
     assert(sem_post(&sem->sm_sem) == 0);
+#endif
 }
 
 struct cv {
