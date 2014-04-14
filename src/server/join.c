@@ -12,7 +12,7 @@
 #define MIN(a,b) ((a) < (b)) ? (a) : (b)
 
 // We'll use 2^NHASHBITS Buckets
-#define NHASHBITS 16
+#define NHASHBITS 15
 
 static
 int
