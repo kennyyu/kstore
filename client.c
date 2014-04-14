@@ -77,7 +77,7 @@ main(int argc, char **argv)
     int result;
     struct client *c;
     TRYNULL(result, DBENOMEM, c, client_create(&client_options), done);
-    TRY(result, client_listen(c), cleanup_client);
+    TRY(result, client_start(c), cleanup_client);
   cleanup_client:
     client_destroy(c);
   done:

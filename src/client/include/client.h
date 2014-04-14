@@ -11,7 +11,7 @@ struct client_options {
 struct client;
 
 struct client *client_create(struct client_options *options);
-int client_listen(struct client *c);
+int client_start(struct client *c);
 void client_destroy(struct client *c);
 
 #endif

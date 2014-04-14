@@ -413,7 +413,7 @@ client_batch(struct client *c)
 }
 
 int
-client_listen(struct client *c)
+client_start(struct client *c)
 {
     assert(c != NULL);
     // Start a client in batch or interactive mode
