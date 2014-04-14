@@ -13,37 +13,34 @@
 #include <sys/stat.h>
 #include <string.h>
 #include <unistd.h>
-#include "src/common/include/io.h"
-#include "src/common/include/threadpool.h"
-#include "src/common/include/rpc.h"
-#include "src/common/include/array.h"
-#include "src/common/include/csv.h"
-#include "src/common/include/search.h"
-#include "src/common/include/dberror.h"
-#include "src/common/include/try.h"
-#include "src/common/include/results.h"
-#include "src/server/include/storage.h"
-#include "src/server/include/aggregate.h"
-#include "src/server/include/join.h"
-#include "src/server/include/server.h"
-
-#define PORT 5000
-#define BACKLOG 16
-#define NTHREADS 16
-#define DBDIR "db"
-
-/*
-// boolean to tell the server to keep looping
-static bool volatile keep_running = true;
+#include "../common/include/io.h"
+#include "../common/include/threadpool.h"
+#include "../common/include/rpc.h"
+#include "../common/include/array.h"
+#include "../common/include/csv.h"
+#include "../common/include/search.h"
+#include "../common/include/dberror.h"
+#include "../common/include/try.h"
+#include "../common/include/results.h"
+#include "../server/include/storage.h"
+#include "include/aggregate.h"
+#include "include/join.h"
+#include "include/server.h"
 
 static
 void
 sigint_handler(int sig)
 {
     (void) sig;
-    keep_running = false;
     printf("Caught shutdown signal, shutting down...\n");
 }
+
+struct server {
+    struct server_options s_opt;
+    int s_listenfd;
+    struct storage *s_storage;
+    struct threadpool *s_threadpool;
+};
 
 enum vartuple_type {
     VAR_IDS,
@@ -67,13 +64,11 @@ struct filetuple {
     int ft_fd;
 };
 
-*/
-//DECLARRAY(vartuple);
-//DEFARRAY(vartuple, /* no inline */);
-//DECLARRAY(filetuple);
-//DEFARRAY(filetuple, /* no inline */);
+DECLARRAY(vartuple);
+DEFARRAY(vartuple, /* no inline */);
+DECLARRAY(filetuple);
+DEFARRAY(filetuple, /* no inline */);
 
-/*
 struct session {
     int ses_fd;
     unsigned ses_jobid;
@@ -526,12 +521,10 @@ server_eval_create(struct session *session, struct op *op)
   done:
     return result;
 }
-*/
 
-//DECLARRAY(column_vals);
-//DEFARRAY(column_vals, /* no inline */);
+DECLARRAY(column_vals);
+DEFARRAY(column_vals, /* no inline */);
 
-/*
 static
 int
 server_eval_tuple(struct session *session, struct op *op)
@@ -741,84 +734,17 @@ server_routine(void *arg, unsigned threadnum)
     }
     session_destroy(sarg);
 }
-*/
 
-/*
-static struct {
-    int sopt_port;
-    int sopt_backlog;
-    int sopt_nthreads;
-    char sopt_dbdir[128];
-} server_options = {
-    .sopt_port = PORT,
-    .sopt_backlog = BACKLOG,
-    .sopt_nthreads = NTHREADS,
-    .sopt_dbdir = DBDIR,
-};
-*/
-struct server_options server_options = {
-    .sopt_port = PORT,
-    .sopt_backlog = BACKLOG,
-    .sopt_nthreads = NTHREADS,
-    .sopt_dbdir = DBDIR,
-};
-
-const char *short_options = "h";
-
-const struct option long_options[] = {
-    {"help", no_argument, NULL, 'h'},
-    {"port", required_argument, &server_options.sopt_port, 0},
-    {"backlog", required_argument, &server_options.sopt_backlog, 0},
-    {"nthreads", required_argument,  &server_options.sopt_nthreads, 0},
-    {"dbdir", required_argument, NULL, 0},
-    {NULL, 0, NULL, 0}
-};
-
-int
-main(int argc, char **argv)
+struct server *
+server_create(struct server_options *options)
 {
-    while (1) {
-        int option_index;
-        int c = getopt_long(argc, argv, short_options,
-                           long_options, &option_index);
-        if (c == -1) {
-            break;
-        }
-        switch (c) {
-        case 0:
-            if (optarg) {
-                if (strcmp(long_options[option_index].name, "dbdir") == 0) {
-                    strcpy(server_options.sopt_dbdir, optarg);
-                } else {
-                    *(long_options[option_index].flag) = atoi(optarg);
-                }
-            }
-            break;
-        case 'h':
-            printf("Usage: %s\n", argv[0]);
-            printf("--help -h\n");
-            printf("--port P        [default=5000]\n");
-            printf("--backlog B     [default=16]\n");
-            printf("--nthreads T    [default=16]\n");
-            printf("--dbdir dir     [default=db]\n");
-            return 0;
-        }
-    }
-    printf("port: %d, backlog: %d, nthreads: %d, dbdir: %s\n",
-            server_options.sopt_port, server_options.sopt_backlog,
-            server_options.sopt_nthreads, server_options.sopt_dbdir);
+    assert(options != NULL);
+    int result;
+    struct server *s = NULL;
+    TRYNULL(result, DBENOMEM, s, malloc(sizeof(struct server)), done);
+    memcpy(&s->s_opt, options, sizeof(struct server_options));
 
-    int result;
-    struct server *s;
-    TRYNULL(result, DBENOMEM, s, server_create(&server_options), done);
-    TRY(result, server_start(s), cleanup_server);
-  cleanup_server:
-    server_destroy(s);
-  done:
-    return result;
-    /*
-    int result;
-    int listenfd, acceptfd;
+    int listenfd;
     struct addrinfo hints, *servinfo;
     int yes = 1;
 
@@ -827,12 +753,12 @@ main(int argc, char **argv)
     hints.ai_socktype = SOCK_STREAM;
     hints.ai_flags = AI_PASSIVE;
     char portbuf[16];
-    sprintf(portbuf, "%d", server_options.sopt_port);
+    sprintf(portbuf, "%d", s->s_opt.sopt_port);
     result = getaddrinfo(NULL, portbuf, &hints, &servinfo);
     if (result != 0) {
         result = DBEGETADDRINFO;
         DBLOG(result);
-        goto done;
+        goto cleanup_malloc;
     }
 
     // create a socket for listening for connections
@@ -841,7 +767,7 @@ main(int argc, char **argv)
     if (listenfd == -1) {
         result = DBESOCKET;
         DBLOG(result);
-        goto done;
+        goto cleanup_malloc;
     }
 
     // make the socket reusable
@@ -862,18 +788,19 @@ main(int argc, char **argv)
     freeaddrinfo(servinfo);
 
     // put the socket in listening mode
-    result = listen(listenfd, server_options.sopt_backlog);
+    result = listen(listenfd, s->s_opt.sopt_backlog);
     if (result == -1) {
         result = DBELISTEN;
         DBLOG(result);
         goto cleanup_listenfd;
     }
+    s->s_listenfd = listenfd;
 
     // install a SIGINT handler for graceful shutdown
     struct sigaction sig;
     sig.sa_handler = sigint_handler;
     sig.sa_flags = 0;
-    sigemptyset( &sig.sa_mask );
+    sigemptyset(&sig.sa_mask);
     result = sigaction( SIGINT, &sig, NULL );
     if (result == -1) {
         result = DBESIGACTION;
@@ -882,27 +809,41 @@ main(int argc, char **argv)
     }
 
     // init the storage directory
-    struct storage *storage = storage_init(server_options.sopt_dbdir);
-    if (storage == NULL) {
-        fprintf(stderr, "storage failed\n");
-        goto cleanup_listenfd;
-    }
+    TRYNULL(result, DBENOMEM, s->s_storage, storage_init(s->s_opt.sopt_dbdir),
+            cleanup_listenfd);
 
     // create a threadpool to handle the connections
-    struct threadpool *tpool = threadpool_create(server_options.sopt_nthreads);
-    if (tpool == NULL) {
-        perror("threadpool");
-        goto cleanup_storage;
-    }
+    TRYNULL(result, DBENOMEM, s->s_threadpool,
+            threadpool_create(s->s_opt.sopt_nthreads), cleanup_storage);
+    result = 0;
+    goto done;
+
+  cleanup_storage:
+    storage_close(s->s_storage);
+  cleanup_listenfd:
+    assert(close(listenfd) == 0);
+  cleanup_malloc:
+    free(s);
+    s = NULL;
+  done:
+    return s;
+}
+
+int
+server_start(struct server *s)
+{
+    assert(s != NULL);
+    int result;
+    int listenfd = s->s_listenfd;
 
     // accept in a loop, waiting for more connections
     unsigned jobid = 0;
-    while (keep_running) {
-        acceptfd = accept(listenfd, NULL, NULL);
+    while (errno != EINTR) {
+        int acceptfd = accept(listenfd, NULL, NULL);
         if (acceptfd == -1) {
             result = DBEACCEPT;
             DBLOG(result);
-            goto shutdown;
+            goto done;
         }
 
         // add the file descriptor as a job to the thread pool
@@ -911,13 +852,13 @@ main(int argc, char **argv)
         // cleaning up the file descriptor
         struct session *sjob;
         TRYNULL(result, DBENOMEM, sjob,
-                session_create(acceptfd, jobid++, storage),
+                session_create(acceptfd, jobid++, s->s_storage),
                 cleanup_acceptfd);
 
         struct job job;
         job.j_arg = (void *) sjob;
         job.j_routine = server_routine;
-        TRY(result, threadpool_add_job(tpool, &job), cleanup_sjob);
+        TRY(result, threadpool_add_job(s->s_threadpool, &job), cleanup_sjob);
         continue;
 
       cleanup_sjob:
@@ -925,16 +866,16 @@ main(int argc, char **argv)
       cleanup_acceptfd:
         assert(close(acceptfd));
     }
-
-  shutdown:
-    threadpool_destroy(tpool);
-    printf("done.\n");
-    result = 0;
-  cleanup_storage:
-    storage_close(storage);
-  cleanup_listenfd:
-    assert(close(listenfd) == 0);
   done:
     return result;
-    */
+}
+
+void
+server_destroy(struct server *s)
+{
+    assert(s != NULL);
+    threadpool_destroy(s->s_threadpool);
+    storage_close(s->s_storage);
+    assert(close(s->s_listenfd) == 0);
+    free(s);
 }
