@@ -27,7 +27,7 @@ struct btree_entry {
     };
 };
 
-CASSERT(PAGESIZE % sizeof(struct btree_entry) == 0);
+CASSERT(PAGESIZE % sizeof(struct btree_entry) == 0, btree);
 
 struct btree_header {
     enum btree_node_type bth_type;
@@ -40,7 +40,7 @@ struct btree_header {
     uint64_t bth_padding; // padding
 };
 
-CASSERT(sizeof(struct btree_header) % sizeof(struct btree_entry) == 0);
+CASSERT(sizeof(struct btree_header) % sizeof(struct btree_entry) == 0, btree);
 
 #define BTENTRY_PER_PAGE ((PAGESIZE - sizeof(struct btree_header)) / sizeof(struct btree_entry))
 
@@ -50,6 +50,6 @@ struct btree_node {
     struct btree_entry bt_entries[BTENTRY_PER_PAGE];
 };
 
-CASSERT(PAGESIZE == sizeof(struct btree_node));
+CASSERT(PAGESIZE == sizeof(struct btree_node), btree);
 
 #endif

@@ -9,6 +9,6 @@
 #define _impl_CASSERT_LINE(predicate, line, file) \
     typedef char _impl_PASTE(assertion_failed_##file##_,line)[2*!!(predicate)-1];
 
-#define CASSERT(predicate) _impl_CASSERT_LINE(predicate,__LINE__,__FILE__)
+#define CASSERT(predicate, file) _impl_CASSERT_LINE(predicate,__LINE__,file)
 
 #endif

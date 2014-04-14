@@ -28,7 +28,7 @@ struct column_on_disk {
     char cd_index_file[56]; // file where index is stored, does not include dbdir
 };
 
-CASSERT(PAGESIZE % sizeof(struct column_on_disk) == 0);
+CASSERT(PAGESIZE % sizeof(struct column_on_disk) == 0, storage);
 
 #define COLUMNS_PER_PAGE (PAGESIZE / sizeof(struct column_on_disk))
 
@@ -58,7 +58,7 @@ struct column_entry_unsorted {
     int ce_val;
 };
 
-CASSERT(PAGESIZE % sizeof(struct column_entry_unsorted) == 0);
+CASSERT(PAGESIZE % sizeof(struct column_entry_unsorted) == 0, storage);
 
 #define COLENTRY_UNSORTED_PER_PAGE (PAGESIZE / sizeof(struct column_entry_unsorted))
 
@@ -68,7 +68,7 @@ struct column_entry_sorted {
     uint64_t ce_index;
 };
 
-CASSERT(PAGESIZE % sizeof(struct column_entry_sorted) == 0);
+CASSERT(PAGESIZE % sizeof(struct column_entry_sorted) == 0, storage);
 
 #define COLENTRY_SORTED_PER_PAGE (PAGESIZE / sizeof(struct column_entry_sorted))
 

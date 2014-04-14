@@ -50,6 +50,6 @@ void dberror_log(char *msg,
 
 #define DBLOG(result) dberror_log((char *) dberror_string((result)), __FILE__, __LINE__, __func__);
 
-CASSERT(DBSUCCESS == 0);
+CASSERT(DBSUCCESS == 0, dberror);
 
 #endif
