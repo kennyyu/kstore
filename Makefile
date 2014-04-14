@@ -76,6 +76,15 @@ CC = gcc
 CFLAGS = -Wall -Werror -ggdb -std=gnu99 -m32
 LIBS = -lm -lpthread -lncurses
 
+# For OSX, assume readline already installed
+UNAME := $(shell uname)
+ifeq ($(UNAME), Darwin)
+	CLIENT_LIBS =
+	COMMON_LIBS =
+	SERVER_LIBS =
+	LIBS += -lreadline
+endif
+
 $(TEST_OBJDIR)/%_test: $(TEST_OBJDIR)/%_test.o $(COMMON_OBJS) $(SERVER_OBJS) $(CLIENT_OBJS)
 	$(CC) -o $@ $^ $(CFLAGS) -I$(COMMON_INCDIR) -I$(SERVER_INCDIR) -I$(CLIENT_INCDIR) \
 		$(COMMON_LIBS) $(SERVER_LIBS) $(CLIENT_LIBS) $(LIBS)
