@@ -8,7 +8,7 @@
 #include "src/client/include/client.h"
 
 #define PORT 5000
-#define HOST "localhost"
+#define HOST "127.0.0.1"
 #define LOADDIR "p2tests"
 
 struct client_options client_options = {

@@ -80,7 +80,7 @@ Here are the options on the client:
     Usage: ./client
     --help
     --port P        [default=5000]       port of the server
-    --host H        [default=localhost]  host of the server
+    --host H        [default=127.0.0.1]  host of the server
     --loaddir dir   [default=p2tests]    directory containing the csv files
                                          referenced in tests.
                                          For project2, this should be p2tests.
