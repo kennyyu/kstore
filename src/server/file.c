@@ -121,7 +121,7 @@ file_alloc_page(struct file *f, page_t *retpage)
     for (page = 0; page < nbits; page++) {
         if (!bitmap_isset(f->f_page_bitmap, page)) {
             bitmap_mark(f->f_page_bitmap, page);
-            assert(file_sync_bitmap(f) == 0);
+            //assert(file_sync_bitmap(f) == 0);
             break;
         }
     }
@@ -150,7 +150,7 @@ file_free_page(struct file *f, page_t page)
     assert(f->f_page_bitmap != NULL);
     assert(bitmap_isset(f->f_page_bitmap, page));
     bitmap_unmark(f->f_page_bitmap, page);
-    assert(file_sync_bitmap(f) == 0);
+    //assert(file_sync_bitmap(f) == 0);
 }
 
 bool

@@ -437,6 +437,9 @@ column_close(struct column *col)
     assert(columnarray_num(storage->st_open_cols) == listlen - 1);
     rwlock_destroy(col->col_rwlock);
     file_close(col->col_base_file);
+    if (col->col_disk.cd_stype == STORAGE_BTREE || col->col_disk.cd_stype == STORAGE_SORTED) {
+        file_close(col->col_index_file);
+    }
     free(col);
 
   done:
