@@ -48,7 +48,8 @@
  * bitmap data saved on disk becomes endian-dependent, which is a
  * severe nuisance.
  */
-#define BITS_PER_WORD   8
+#define BITS_PER_WORD_BITS 3
+#define BITS_PER_WORD   (1 << BITS_PER_WORD_BITS)
 #define WORD_TYPE       unsigned char
 #define WORD_ALLBITS    (0xff)
 
@@ -145,8 +146,10 @@ static
 inline
 void bitmap_translate(unsigned bitno, unsigned *ix, WORD_TYPE *mask) {
     unsigned offset;
-    *ix = bitno / BITS_PER_WORD;
-    offset = bitno % BITS_PER_WORD;
+    //*ix = bitno / BITS_PER_WORD;
+    //offset = bitno % BITS_PER_WORD;
+    *ix = bitno >> BITS_PER_WORD_BITS;
+    offset = bitno & ((1 << BITS_PER_WORD_BITS) - 1);
     *mask = ((WORD_TYPE) 1) << offset;
 }
 

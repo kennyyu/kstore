@@ -17,6 +17,7 @@ struct file {
     int f_fd;
     uint64_t f_size;
     struct bitmap *f_page_bitmap;
+    unsigned f_last_alloc_page;
 };
 
 static
@@ -89,6 +90,7 @@ file_open(char *name)
     }
     // seek back to beginning on opening
     result = lseek(f->f_fd, 0, SEEK_SET);
+    f->f_last_alloc_page = FILE_BITMAP_PAGES - 1;
     if (result) {
         goto cleanup_fd;
     }
@@ -118,7 +120,7 @@ file_alloc_page(struct file *f, page_t *retpage)
 {
     page_t page;
     unsigned nbits = bitmap_nbits(f->f_page_bitmap);
-    for (page = 0; page < nbits; page++) {
+    for (page = f->f_last_alloc_page + 1; page < nbits; page++) {
         if (!bitmap_isset(f->f_page_bitmap, page)) {
             bitmap_mark(f->f_page_bitmap, page);
             //assert(file_sync_bitmap(f) == 0);
@@ -138,6 +140,7 @@ file_alloc_page(struct file *f, page_t *retpage)
             return result;
         }
         f->f_size += PAGESIZE;
+        f->f_last_alloc_page = page;
     }
     *retpage = page;
     return 0;
