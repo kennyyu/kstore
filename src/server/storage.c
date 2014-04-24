@@ -112,9 +112,11 @@ storage_find_column(struct storage *storage, char *colname,
         // Check if any of the columns match our column name
         for (unsigned i = 0; i < COLUMNS_PER_PAGE; i++) {
             if (colbuf[i].cd_magic == COLUMN_FREE) {
-                free_found = true;
-                free_page = page;
-                free_colindex = i;
+                if (!free_found) {
+                    free_found = true;
+                    free_page = page;
+                    free_colindex = i;
+                }
                 continue;
             }
             assert(colbuf[i].cd_magic == COLUMN_TAKEN);

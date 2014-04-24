@@ -14,9 +14,14 @@ column_agg(struct column_vals *vals,
     assert(vals != NULL);
     assert(f != NULL);
     assert(retvals != NULL);
+    int result;
+    if (f == agg_avg && vals->cval_len == 0) {
+        result = DBEDIVZERO; // handle division by zero
+        DBLOG(result);
+        goto done;
+    }
     int agg = f(vals);
 
-    int result;
     struct column_vals *aggval = NULL;
     TRYNULL(result, DBENOMEM, aggval, malloc(sizeof(struct column_vals)), done);
     bzero(aggval, sizeof(struct column_vals));

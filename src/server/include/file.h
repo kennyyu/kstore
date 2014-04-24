@@ -5,7 +5,8 @@
 #include <stdbool.h>
 
 #define PAGESIZE 4096
-#define FILE_FIRST_PAGE 1
+#define FILE_BITMAP_PAGES 2
+#define FILE_FIRST_PAGE FILE_BITMAP_PAGES
 
 typedef uint64_t page_t;
 
