@@ -99,7 +99,7 @@ file_alloc_page(struct file *f, page_t *retpage)
     if (page == nbits) {
         // no more space in bitmap
         fprintf(stderr, "no more space in bitmap\n");
-        return ENOMEM;
+        return DBENOMEM;
     }
     // if we do get a valid page number, extend the file if necessary
     if (page * PAGESIZE >= f->f_size) {
