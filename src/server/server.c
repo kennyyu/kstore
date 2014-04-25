@@ -490,7 +490,7 @@ server_eval_insert(struct session *session, struct op *op)
 {
     assert(session != NULL);
     assert(op != NULL);
-    assert(op->op_type == OP_INSERT);
+    assert(op->op_type == OP_INSERT_SINGLE);
 
     int result;
     struct column *col;
@@ -639,7 +639,7 @@ server_eval(struct session *session, struct op *op)
         return server_eval_create(session, op);
     case OP_LOAD:
         return server_eval_load(session, op);
-    case OP_INSERT:
+    case OP_INSERT_SINGLE:
         return server_eval_insert(session, op);
     case OP_TUPLE:
         return server_eval_tuple(session, op);

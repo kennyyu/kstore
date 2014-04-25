@@ -69,7 +69,7 @@ char *op_string(struct op *op) {
         sprintf(buf, "load(\"%s\")",
                 op->op_load.op_load_file);
         break;
-    case OP_INSERT:
+    case OP_INSERT_SINGLE:
         sprintf(buf, "insert(%s,%u)",
                 op->op_insert.op_insert_col,
                 op->op_insert.op_insert_val);

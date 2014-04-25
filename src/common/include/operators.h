@@ -17,7 +17,7 @@ enum op_type {
     OP_FETCH_ASSIGN,
     OP_CREATE,
     OP_LOAD,
-    OP_INSERT,
+    OP_INSERT_SINGLE,
     OP_TUPLE,
     OP_AGG,
     OP_MATH,
@@ -87,7 +87,7 @@ struct op_load {
     char op_load_file[COLUMNLEN];
 };
 
-struct op_insert {
+struct op_insert_single {
     char op_insert_col[COLUMNLEN];
     unsigned op_insert_val;
 };
@@ -126,7 +126,7 @@ struct op {
         struct op_fetch op_fetch;
         struct op_create op_create;
         struct op_load op_load;
-        struct op_insert op_insert;
+        struct op_insert_single op_insert;
         struct op_tuple op_tuple;
         struct op_agg op_agg;
         struct op_math op_math;
