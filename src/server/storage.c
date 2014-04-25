@@ -1610,6 +1610,96 @@ column_insert(struct column *col, int val)
     return result;
 }
 
+static
+int
+column_update_unsorted(struct column *col, struct column_ids *ids, int val)
+{
+    assert(col != NULL);
+    assert(ids != NULL);
+    assert(col->col_disk.cd_stype == STORAGE_UNSORTED);
+
+    int result;
+    struct cid_iterator iter;
+    cid_iter_init(&iter, ids);
+
+    page_t curpage = 0;
+    bool dirty = false;
+    struct column_entry_unsorted colentrybuf[COLENTRY_UNSORTED_PER_PAGE];
+    while (cid_iter_has_next(&iter)) {
+        uint64_t id = cid_iter_get(&iter);
+        assert(id < col->col_disk.cd_nexttupleid);
+        page_t requestedpage = FILE_FIRST_PAGE + (id / COLENTRY_UNSORTED_PER_PAGE);
+        assert(requestedpage != 0);
+        // if the requested page is not the current page in the buffer
+        // write out the current page if it is dirty
+        // then read in the requested page and update the curpage
+        if (requestedpage != curpage) {
+            if (dirty) {
+                TRY(result, file_write(col->col_base_file, curpage, colentrybuf), done);
+            }
+            TRY(result, file_read(col->col_base_file, requestedpage, colentrybuf), done);
+            curpage = requestedpage;
+        }
+        unsigned requestedindex = id % COLENTRY_UNSORTED_PER_PAGE;
+        assert(colentrybuf[requestedindex].ce_taken);
+        colentrybuf[requestedindex].ce_val = val;
+        dirty = true;
+    }
+    if (dirty) {
+        TRY(result, file_write(col->col_base_file, curpage, colentrybuf), done);
+    }
+    cid_iter_cleanup(&iter);
+
+    // success
+    result = 0;
+    goto done;
+  done:
+    return result;
+}
+
+int
+column_update(struct column *col, struct column_ids *ids, int val)
+{
+    assert(col != NULL);
+    assert(ids != NULL);
+
+    int result;
+    rwlock_acquire_write(col->col_rwlock);
+
+    // Make sure the number of bits does not exceed the number of ids in the col
+    if (col->col_disk.cd_nexttupleid < bitmap_nbits(ids->cid_bitmap)) {
+        result = DBECOLDIFFLEN;
+        DBLOG(result);
+        goto done;
+    }
+
+    // We only support updates on unsorted columns
+    switch(col->col_disk.cd_stype) {
+    case STORAGE_SORTED:
+    case STORAGE_BTREE:
+        result = DBEUNSUPPORTED;
+        DBLOG(result);
+        goto done;
+    case STORAGE_UNSORTED:
+        TRY(result, column_update_unsorted(col, ids, val), done);
+        break;
+    }
+
+    // success
+    result = 0;
+    goto done;
+  done:
+    rwlock_release(col->col_rwlock);
+    return result;
+}
+
+int
+column_delete(struct column *col, struct column_ids *ids)
+{
+    // TODO
+    return 0;
+}
+
 int
 column_load(struct column *col, int *vals, uint64_t num)
 {

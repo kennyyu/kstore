@@ -40,6 +40,7 @@ dberror_string(enum dberror result)
     case DBEDIVZERO: return "division by zero";
     case DBECOLDIFFLEN: return "select intermediate and column have different lengths";
     case DBENOTREE: return "no btree on join input tree column";
+    case DBEUNSUPPORTED: return "unsupported operation on this column";
     default:
         assert(0);
         return NULL;

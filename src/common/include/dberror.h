@@ -36,6 +36,7 @@ enum dberror {
     DBEDIVZERO,
     DBECOLDIFFLEN,
     DBENOTREE,
+    DBEUNSUPPORTED,
 };
 
 const char *dberror_string(enum dberror result);

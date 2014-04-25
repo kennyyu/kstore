@@ -91,6 +91,8 @@ int column_open(struct storage *storage, char *colname, struct column **retcol);
 void column_close(struct column *col);
 
 int column_insert(struct column *col, int val);
+int column_update(struct column *col, struct column_ids *ids, int val);
+int column_delete(struct column *col, struct column_ids *ids);
 int column_load(struct column *col, int *vals, uint64_t num);
 
 // need reader/writer locks for select,fetch (read) and insert(write)
