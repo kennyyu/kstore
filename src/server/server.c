@@ -62,6 +62,7 @@ struct vartuple {
 struct filetuple {
     char ft_name[128];
     int ft_fd;
+    uint64_t ft_size;
 };
 
 DECLARRAY(vartuple);
@@ -142,11 +143,13 @@ server_eval_load(struct session *session, struct op *op)
     // find the csv file descriptor for the load file name
     int csvfd = -1;
     unsigned ix = -1;
+    uint64_t nbytes = 0;
     for (unsigned i = 0; i < filetuplearray_num(session->ses_files); i++) {
         struct filetuple *ftuple = filetuplearray_get(session->ses_files, i);
         if (strcmp(ftuple->ft_name, op->op_load.op_load_file) == 0) {
             ix = i;
             csvfd = ftuple->ft_fd;
+            nbytes = ftuple->ft_size;
             break;
         }
     }
@@ -157,7 +160,7 @@ server_eval_load(struct session *session, struct op *op)
 
     // parse the csv
     struct csv_resultarray *results = NULL;
-    TRYNULL(result, DBECSV, results, csv_parse(csvfd), done);
+    TRYNULL(result, DBECSV, results, csv_parse(csvfd, nbytes), done);
 
     // for each column, load the data into that column
     for (unsigned i = 0; i < csv_resultarray_num(results); i++) {
@@ -683,19 +686,25 @@ server_routine(void *arg, unsigned threadnum)
             // handle RPC_FILE here as well
             TRY(result, rpc_read_query(clientfd, &msg, &op), recover);
             if (op->op_type == OP_LOAD) {
-                int copyfd;
                 char filenamebuf[128];
                 sprintf(filenamebuf, "%s/jobid-%d.loadid-%d.tmp",
                         sarg->ses_storage->st_dbdir, jobid, loadid);
                 loadid++;
                 TRY(result, rpc_read_header(clientfd, &loadmsg), cleanup_op);
                 assert(loadmsg.rpc_type = RPC_FILE);
-                TRY(result, rpc_read_file(clientfd, &loadmsg, filenamebuf, &copyfd), cleanup_op);
+                //int copyfd = dup(clientfd);
+                //if (copyfd == -1) {
+                //    result = DBEDUP;
+                //    DBLOG(result);
+                //    goto cleanup_op;
+                //}
+                //TRY(result, rpc_read_file(clientfd, &loadmsg, filenamebuf, &copyfd), cleanup_op);
                 struct filetuple *ftuple;
                 TRYNULL(result, DBENOMEM, ftuple, malloc(sizeof(struct filetuple)), cleanup_op);
                 // TODO: file names are larger than ftuple char buf
                 strcpy(ftuple->ft_name, op->op_load.op_load_file);
-                ftuple->ft_fd = copyfd;
+                ftuple->ft_fd = clientfd;
+                ftuple->ft_size = loadmsg.rpc_len;
                 result = filetuplearray_add(sarg->ses_files, ftuple, NULL);
                 if (result) {
                     free(ftuple);

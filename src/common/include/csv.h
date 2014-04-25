@@ -2,6 +2,7 @@
 #define _CSV_H_
 
 #include <stdio.h>
+#include <stdint.h>
 #include "array.h"
 
 DECLARRAY_BYTYPE(intarray, int);
@@ -13,7 +14,7 @@ struct csv_result {
 
 DECLARRAY(csv_result);
 
-struct csv_resultarray *csv_parse(int fd);
+struct csv_resultarray *csv_parse(int fd, uint64_t nbytes);
 void csv_destroy(struct csv_resultarray *results);
 
 #endif
