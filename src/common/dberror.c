@@ -41,6 +41,7 @@ dberror_string(enum dberror result)
     case DBECOLDIFFLEN: return "select intermediate and column have different lengths";
     case DBENOTREE: return "no btree on join input tree column";
     case DBEUNSUPPORTED: return "unsupported operation on this column";
+    case DBEDUPCOL: return "duplicate column";
     default:
         assert(0);
         return NULL;

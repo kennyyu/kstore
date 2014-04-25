@@ -516,6 +516,19 @@ server_eval_insert(struct session *session, struct op *op)
         pch = strtok_r(NULL, ",", &saveptr);
     }
 
+    // make sure there are no duplicate column names
+    for (unsigned i = 0; i < insertpairarray_num(pairs); i++) {
+        for (unsigned j = i + 1; j < insertpairarray_num(pairs); j++) {
+            struct insertpair *pair1 = insertpairarray_get(pairs, i);
+            struct insertpair *pair2 = insertpairarray_get(pairs, j);
+            if (strcmp(pair1->inspair_col, pair2->inspair_col) == 0) {
+                result = DBEDUPCOL;
+                DBLOG(result);
+                goto cleanup_insertpairs;
+            }
+        }
+    }
+
     // Now actually perform the insertion, one column at a time
     struct column *col = NULL;
     for (unsigned i = 0; i < insertpairarray_num(pairs); i++) {
