@@ -553,9 +553,38 @@ server_eval_delete(struct session *session, struct op *op)
     assert(op->op_type == OP_DELETE);
     int result = 0;
 
+    // try to find the variable in the environment, ensure it is ids
+    struct vartuple *idvar;
+    TRYNULL(result, DBENOVAR, idvar,
+            server_eval_get_var(session->ses_env, op->op_delete.op_delete_var),
+            done);
+    if (idvar->vt_type != VAR_IDS) {
+        result = DBEVARTYPE;
+        DBLOG(result);
+        goto done;
+    }
+
+    // perform the delete on each column, one by one
+    // TODO: partial delete ==> how to handle?
+    struct column *col = NULL;
+    char *saveptr;
+    char *pch = strtok_r(op->op_delete.op_delete_cols, ",", &saveptr);
+    while (pch != NULL) {
+        char *colname = pch;
+        TRY(result, column_open(session->ses_storage, colname, &col), cleanup_col);
+        TRY(result, column_delete(col, idvar->vt_column_ids), cleanup_col);
+        column_close(col);
+        col = NULL;
+        pch = strtok_r(NULL, ",", &saveptr);
+    }
+
     // success
     result = 0;
     goto done;
+  cleanup_col:
+    if (col != NULL) {
+        column_close(col);
+    }
   done:
     return result;
 }
