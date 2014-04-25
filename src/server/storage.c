@@ -223,6 +223,7 @@ storage_add_column(struct storage *storage, char *colname,
     bzero(&newcol, sizeof(struct column_on_disk));
     strcpy(newcol.cd_col_name, colname);
     newcol.cd_ntuples = 0;
+    newcol.cd_nexttupleid = 0;
     newcol.cd_magic = COLUMN_TAKEN;
     newcol.cd_stype = stype;
     newcol.cd_btree_root = BTREE_PAGE_NULL;
@@ -819,6 +820,7 @@ btree_insert(struct column *col, struct btree_entry *entry)
     result = 0;
     col->col_disk.cd_btree_root = newrootpage;
     col->col_disk.cd_ntuples++;
+    col->col_disk.cd_nexttupleid++;
     col->col_dirty = true;
     goto done;
   done:
@@ -1085,20 +1087,20 @@ column_select_unsorted(struct column *col, struct op *op,
     int result;
     struct column_entry_unsorted colentrybuf[COLENTRY_UNSORTED_PER_PAGE];
     uint64_t scanned = 0;
-    uint64_t ntuples = col->col_disk.cd_ntuples;
+    uint64_t maxtuples = col->col_disk.cd_nexttupleid;
     page_t page = FILE_FIRST_PAGE;
-    while (scanned < ntuples) {
+    while (scanned < maxtuples) {
         TRY(result, file_read(col->col_base_file, page, colentrybuf), done);
-        uint64_t toscan = MIN(ntuples - scanned, COLENTRY_UNSORTED_PER_PAGE);
+        uint64_t toscan = MIN(maxtuples - scanned, COLENTRY_UNSORTED_PER_PAGE);
         for (unsigned i = 0; i < toscan; i++, scanned++) {
             struct column_entry_unsorted entry = colentrybuf[i];
-            if (column_select_predicate(entry.ce_val, op)) {
+            if (entry.ce_taken && column_select_predicate(entry.ce_val, op)) {
                 bitmap_mark(cids->cid_bitmap, scanned);
             }
         }
         page++;
     }
-    assert(scanned == ntuples);
+    assert(scanned == maxtuples);
     result = 0;
     goto done;
   done:
@@ -1116,7 +1118,7 @@ column_select(struct column *col, struct op *op)
     struct column_ids *cids;
     TRYNULL(result, DBENOMEM, cids, malloc(sizeof(struct column_ids)), done);
     TRYNULL(result, DBENOMEM,
-            cids->cid_bitmap, bitmap_create(col->col_disk.cd_ntuples), cleanup_malloc);
+            cids->cid_bitmap, bitmap_create(col->col_disk.cd_nexttupleid), cleanup_malloc);
     cids->cid_type = CID_BITMAP;
     // select based on the storage type of the column
     switch (col->col_disk.cd_stype) {
@@ -1204,7 +1206,7 @@ column_fetch_base_data(struct column *col, struct column_ids *ids,
     unsigned ni = 0;
     while (cid_iter_has_next(&iter)) {
         uint64_t i = cid_iter_get(&iter);
-        assert(i < col->col_disk.cd_ntuples);
+        assert(i < col->col_disk.cd_nexttupleid);
         page_t requestedpage =
                 FILE_FIRST_PAGE + (i / COLENTRY_UNSORTED_PER_PAGE);
         assert(requestedpage != 0);
@@ -1215,6 +1217,7 @@ column_fetch_base_data(struct column *col, struct column_ids *ids,
             curpage = requestedpage;
         }
         unsigned requestedindex = i % COLENTRY_UNSORTED_PER_PAGE;
+        assert(colentrybuf[requestedindex].ce_taken);
         int val = colentrybuf[requestedindex].ce_val;
         if (ids->cid_type == CID_BITMAP) {
             TRY(result, valarray_add(vals, (void *) val, NULL), done);
@@ -1242,10 +1245,10 @@ column_fetch(struct column *col, struct column_ids *ids)
     struct column_vals *cvals = NULL;
 
     rwlock_acquire_read(col->col_rwlock);
-    uint64_t ntuples = col->col_disk.cd_ntuples;
+    uint64_t maxtuples = col->col_disk.cd_nexttupleid;
     switch (ids->cid_type) {
     case CID_BITMAP:
-        if (ntuples != bitmap_nbits(ids->cid_bitmap)) {
+        if (maxtuples != bitmap_nbits(ids->cid_bitmap)) {
             result = DBECOLDIFFLEN;
             DBLOG(result);
             goto done;
@@ -1346,17 +1349,19 @@ int
 column_load_unsorted(struct file *f, int *vals, uint64_t num)
 {
     int result = 0;
-    int intbuf[PAGESIZE / sizeof(int)];
+    struct column_entry_unsorted colentrybuf[COLENTRY_UNSORTED_PER_PAGE];
     uint64_t curtuple = 0;
     while (curtuple < num) {
         uint64_t tuples_tocopy =
                 MIN(COLENTRY_UNSORTED_PER_PAGE, num - curtuple);
-        size_t bytes_tocopy = tuples_tocopy * sizeof(int);
-        bzero(intbuf, PAGESIZE);
-        memcpy(intbuf, vals + curtuple, bytes_tocopy);
+        bzero(colentrybuf, PAGESIZE);
+        for (unsigned i = 0; i < tuples_tocopy; i++) {
+            colentrybuf[i].ce_taken = true;
+            colentrybuf[i].ce_val = vals[curtuple + i];
+        }
         page_t page;
         TRY(result, file_alloc_page(f, &page), done);
-        result = file_write(f, page, intbuf);
+        result = file_write(f, page, colentrybuf);
         if (result) {
             file_free_page(f, page);
             goto done;
@@ -1524,6 +1529,7 @@ column_insert_sorted(struct column *col, int val)
         page++;
     }
     col->col_disk.cd_ntuples++;
+    col->col_disk.cd_nexttupleid++;
     col->col_dirty = true;
 
     // success
@@ -1543,7 +1549,7 @@ column_insert_unsorted(struct column *col, int val)
     assert(col != NULL);
 
     int result;
-    uint64_t index = col->col_disk.cd_ntuples;
+    uint64_t index = col->col_disk.cd_nexttupleid;
     page_t page = FILE_FIRST_PAGE + index / COLENTRY_UNSORTED_PER_PAGE;
     page_t newpage;
     if (!file_page_isalloc(col->col_base_file, page)) {
@@ -1554,6 +1560,7 @@ column_insert_unsorted(struct column *col, int val)
     TRY(result, file_read(col->col_base_file, page, colbuf), cleanup_page);
     unsigned ix = index % COLENTRY_UNSORTED_PER_PAGE;
     colbuf[ix].ce_val = val;
+    colbuf[ix].ce_taken = true;
     TRY(result, file_write(col->col_base_file, page, colbuf), cleanup_page);
 
     // success
@@ -1584,6 +1591,7 @@ column_insert(struct column *col, int val)
         break;
     case STORAGE_UNSORTED:
         col->col_disk.cd_ntuples++;
+        col->col_disk.cd_nexttupleid++;
         col->col_dirty = true;
         break;
     default:
@@ -1624,10 +1632,12 @@ column_load(struct column *col, int *vals, uint64_t num)
     case STORAGE_SORTED:
         result = column_load_index_sorted(col->col_index_file, vals, num);
         col->col_disk.cd_ntuples += num;
+        col->col_disk.cd_nexttupleid += num;
         col->col_dirty = true;
         break;
     case STORAGE_UNSORTED:
         col->col_disk.cd_ntuples += num;
+        col->col_disk.cd_nexttupleid += num;
         col->col_dirty = true;
         break;
     default:
