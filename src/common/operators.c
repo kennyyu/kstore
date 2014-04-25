@@ -70,9 +70,24 @@ char *op_string(struct op *op) {
                 op->op_load.op_load_file);
         break;
     case OP_INSERT_SINGLE:
-        sprintf(buf, "insert(%s,%u)",
+        sprintf(buf, "insert(%s,%d)",
                 op->op_insert_single.op_insert_single_col,
                 op->op_insert_single.op_insert_single_val);
+        break;
+    case OP_INSERT:
+        sprintf(buf, "insert(%s)",
+                op->op_insert.op_insert_cols);
+        break;
+    case OP_DELETE:
+        sprintf(buf, "delete(%s,%s)",
+                op->op_delete.op_delete_var,
+                op->op_delete.op_delete_cols);
+        break;
+    case OP_UPDATE:
+        sprintf(buf, "update(%s,%s,%d)",
+                op->op_update.op_update_var,
+                op->op_update.op_update_col,
+                op->op_update.op_update_val);
         break;
     case OP_TUPLE:
         sprintf(buf, "tuple(%s)",

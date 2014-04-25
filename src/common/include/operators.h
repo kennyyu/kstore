@@ -92,11 +92,11 @@ struct op_load {
 
 struct op_insert_single {
     char op_insert_single_col[COLUMNLEN];
-    unsigned op_insert_single_val;
+    int op_insert_single_val;
 };
 
 struct op_insert {
-    char op_insert_vars[TUPLELEN];
+    char op_insert_cols[TUPLELEN];
 };
 
 struct op_delete {

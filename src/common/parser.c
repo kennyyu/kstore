@@ -156,11 +156,34 @@ parse_line(char *line)
         op->op_type = OP_LOAD;
         goto check_extra_args;
     }
+    /*
     bzero(op, sizeof(struct op));
-    if (sscanf(line, "insert(%[^,],%u)",
+    if (sscanf(line, "insert(%[^,],%d)",
         (char *) &op->op_insert_single.op_insert_single_col,
         &op->op_insert_single.op_insert_single_val) == 2) {
         op->op_type = OP_INSERT_SINGLE;
+        goto check_extra_args;
+    }
+    */
+    bzero(op, sizeof(struct op));
+    if (sscanf(line, "insert(%[^)])",
+        (char *) &op->op_insert.op_insert_cols) == 1) {
+        op->op_type = OP_INSERT;
+        goto check_extra_args;
+    }
+    bzero(op, sizeof(struct op));
+    if (sscanf(line, "delete(%[^,],%[^)])",
+        (char *) &op->op_delete.op_delete_var,
+        (char *) &op->op_delete.op_delete_cols) == 2) {
+        op->op_type = OP_DELETE;
+        goto check_extra_args;
+    }
+    bzero(op, sizeof(struct op));
+    if (sscanf(line, "update(%[^,],%[^,],%d)",
+        (char *) &op->op_update.op_update_var,
+        (char *) &op->op_update.op_update_col,
+        &op->op_update.op_update_val) == 3) {
+        op->op_type = OP_UPDATE;
         goto check_extra_args;
     }
     bzero(op, sizeof(struct op));

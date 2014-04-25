@@ -178,7 +178,8 @@ void testload(void) {
     parse_cleanup_ops(ops);
 }
 
-void testinsert(void) {
+/*
+void testinsertsingle(void) {
     char *query = "insert(C,5)";
     struct oparray *ops = parse_query(query);
     assert(oparray_num(ops) == 1);
@@ -186,6 +187,49 @@ void testinsert(void) {
     assert(op->op_type == OP_INSERT_SINGLE);
     assert(strcmp(op->op_insert_single.op_insert_single_col,"C") == 0);
     assert(op->op_insert_single.op_insert_single_val == 5);
+    char *s = op_string(op);
+    assert(strcmp(query, s) == 0);
+    free(s);
+    parse_cleanup_ops(ops);
+}
+*/
+
+void testinsert(void) {
+    char *query = "insert(a,1,b,2,c,3)";
+    struct oparray *ops = parse_query(query);
+    assert(oparray_num(ops) == 1);
+    struct op *op = oparray_get(ops, 0);
+    assert(op->op_type == OP_INSERT);
+    assert(strcmp(op->op_insert.op_insert_cols,"a,1,b,2,c,3") == 0);
+    char *s = op_string(op);
+    assert(strcmp(query, s) == 0);
+    free(s);
+    parse_cleanup_ops(ops);
+}
+
+void testdelete(void) {
+    char *query = "delete(t1,a,b,c)";
+    struct oparray *ops = parse_query(query);
+    assert(oparray_num(ops) == 1);
+    struct op *op = oparray_get(ops, 0);
+    assert(op->op_type == OP_DELETE);
+    assert(strcmp(op->op_delete.op_delete_var,"t1") == 0);
+    assert(strcmp(op->op_delete.op_delete_cols,"a,b,c") == 0);
+    char *s = op_string(op);
+    assert(strcmp(query, s) == 0);
+    free(s);
+    parse_cleanup_ops(ops);
+}
+
+void testupdate(void) {
+    char *query = "update(t1,a,1)";
+    struct oparray *ops = parse_query(query);
+    assert(oparray_num(ops) == 1);
+    struct op *op = oparray_get(ops, 0);
+    assert(op->op_type == OP_UPDATE);
+    assert(strcmp(op->op_update.op_update_var,"t1") == 0);
+    assert(strcmp(op->op_update.op_update_col,"a") == 0);
+    assert(op->op_update.op_update_val == 1);
     char *s = op_string(op);
     assert(strcmp(query, s) == 0);
     free(s);
@@ -583,9 +627,9 @@ void testbad(void) {
 void testmultiple(void) {
     char *s;
     struct op *op;
-    char *query = "inter=select(C,4,20)\nfetch(D,inter)\ninsert(D,5)";
+    char *query = "inter=select(C,4,20)\nfetch(D,inter)";
     struct oparray *ops = parse_query(query);
-    assert(oparray_num(ops) == 3);
+    assert(oparray_num(ops) == 2);
 
     op = oparray_get(ops, 0);
     assert(op->op_type == OP_SELECT_RANGE_ASSIGN);
@@ -603,14 +647,6 @@ void testmultiple(void) {
     assert(strcmp(op->op_fetch.op_fetch_col,"D") == 0);
     s = op_string(op);
     assert(strcmp("fetch(D,inter)", s) == 0);
-    free(s);
-
-    op = oparray_get(ops, 2);
-    assert(op->op_type == OP_INSERT_SINGLE);
-    assert(strcmp(op->op_insert_single.op_insert_single_col,"D") == 0);
-    assert(op->op_insert_single.op_insert_single_val == 5);
-    s = op_string(op);
-    assert(strcmp("insert(D,5)", s) == 0);
     free(s);
 
     parse_cleanup_ops(ops);
@@ -631,6 +667,8 @@ int main(void) {
     testcreatebtree();
     testload();
     testinsert();
+    testdelete();
+    testupdate();
     testtuple();
     testmultiple();
     testmin();
