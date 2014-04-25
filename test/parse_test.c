@@ -178,21 +178,18 @@ void testload(void) {
     parse_cleanup_ops(ops);
 }
 
-/*
 void testinsertsingle(void) {
     char *query = "insert(C,5)";
     struct oparray *ops = parse_query(query);
     assert(oparray_num(ops) == 1);
     struct op *op = oparray_get(ops, 0);
-    assert(op->op_type == OP_INSERT_SINGLE);
-    assert(strcmp(op->op_insert_single.op_insert_single_col,"C") == 0);
-    assert(op->op_insert_single.op_insert_single_val == 5);
+    assert(op->op_type == OP_INSERT);
+    assert(strcmp(op->op_insert.op_insert_cols,"C,5") == 0);
     char *s = op_string(op);
     assert(strcmp(query, s) == 0);
     free(s);
     parse_cleanup_ops(ops);
 }
-*/
 
 void testinsert(void) {
     char *query = "insert(a,1,b,2,c,3)";
@@ -667,6 +664,7 @@ int main(void) {
     testcreatebtree();
     testload();
     testinsert();
+    testinsertsingle();
     testdelete();
     testupdate();
     testtuple();

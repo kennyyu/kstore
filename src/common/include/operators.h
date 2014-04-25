@@ -17,7 +17,6 @@ enum op_type {
     OP_FETCH_ASSIGN,
     OP_CREATE,
     OP_LOAD,
-    OP_INSERT_SINGLE,
     OP_INSERT,
     OP_DELETE,
     OP_UPDATE,
@@ -90,11 +89,6 @@ struct op_load {
     char op_load_file[COLUMNLEN];
 };
 
-struct op_insert_single {
-    char op_insert_single_col[COLUMNLEN];
-    int op_insert_single_val;
-};
-
 struct op_insert {
     char op_insert_cols[TUPLELEN];
 };
@@ -144,7 +138,6 @@ struct op {
         struct op_fetch op_fetch;
         struct op_create op_create;
         struct op_load op_load;
-        struct op_insert_single op_insert_single;
         struct op_insert op_insert;
         struct op_delete op_delete;
         struct op_update op_update;

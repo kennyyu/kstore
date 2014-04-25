@@ -156,15 +156,6 @@ parse_line(char *line)
         op->op_type = OP_LOAD;
         goto check_extra_args;
     }
-    /*
-    bzero(op, sizeof(struct op));
-    if (sscanf(line, "insert(%[^,],%d)",
-        (char *) &op->op_insert_single.op_insert_single_col,
-        &op->op_insert_single.op_insert_single_val) == 2) {
-        op->op_type = OP_INSERT_SINGLE;
-        goto check_extra_args;
-    }
-    */
     bzero(op, sizeof(struct op));
     if (sscanf(line, "insert(%[^)])",
         (char *) &op->op_insert.op_insert_cols) == 1) {

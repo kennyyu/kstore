@@ -484,28 +484,6 @@ server_eval_print(struct session *session, struct op *op)
     return result;
 }
 
-static
-int
-server_eval_insert_single(struct session *session, struct op *op)
-{
-    assert(session != NULL);
-    assert(op != NULL);
-    assert(op->op_type == OP_INSERT_SINGLE);
-
-    int result;
-    struct column *col;
-    TRY(result, column_open(session->ses_storage, op->op_insert_single.op_insert_single_col, &col), done);
-    TRY(result, column_insert(col, op->op_insert_single.op_insert_single_val), done);
-
-    // success
-    result = 0;
-    goto cleanup_col;
-  cleanup_col:
-    column_close(col);
-  done:
-    return result;
-}
-
 struct insertpair {
     char inspair_col[COLUMNLEN];
     int inspair_val;
@@ -731,8 +709,6 @@ server_eval(struct session *session, struct op *op)
         return server_eval_create(session, op);
     case OP_LOAD:
         return server_eval_load(session, op);
-    case OP_INSERT_SINGLE:
-        return server_eval_insert_single(session, op);
     case OP_INSERT:
         return server_eval_insert(session, op);
     case OP_DELETE:
