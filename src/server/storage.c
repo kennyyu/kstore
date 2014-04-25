@@ -1667,10 +1667,17 @@ column_update(struct column *col, struct column_ids *ids, int val)
     rwlock_acquire_write(col->col_rwlock);
 
     // Make sure the number of bits does not exceed the number of ids in the col
-    if (col->col_disk.cd_nexttupleid < bitmap_nbits(ids->cid_bitmap)) {
-        result = DBECOLDIFFLEN;
-        DBLOG(result);
-        goto done;
+    switch (ids->cid_type) {
+    case CID_BITMAP:
+        if (col->col_disk.cd_nexttupleid < bitmap_nbits(ids->cid_bitmap)) {
+            result = DBECOLDIFFLEN;
+            DBLOG(result);
+            goto done;
+        }
+        break;
+    case CID_ARRAY:
+        break;
+    default: assert(0); break;
     }
 
     // We only support updates on unsorted columns
@@ -1755,10 +1762,17 @@ column_delete(struct column *col, struct column_ids *ids)
     rwlock_acquire_write(col->col_rwlock);
 
     // Make sure the number of bits does not exceed the number of ids in the col
-    if (col->col_disk.cd_nexttupleid < bitmap_nbits(ids->cid_bitmap)) {
-        result = DBECOLDIFFLEN;
-        DBLOG(result);
-        goto done;
+    switch (ids->cid_type) {
+    case CID_BITMAP:
+        if (col->col_disk.cd_nexttupleid < bitmap_nbits(ids->cid_bitmap)) {
+            result = DBECOLDIFFLEN;
+            DBLOG(result);
+            goto done;
+        }
+        break;
+    case CID_ARRAY:
+        break;
+    default: assert(0); break;
     }
 
     // We only support updates on unsorted columns
