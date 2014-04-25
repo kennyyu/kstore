@@ -184,8 +184,8 @@ void testinsert(void) {
     assert(oparray_num(ops) == 1);
     struct op *op = oparray_get(ops, 0);
     assert(op->op_type == OP_INSERT_SINGLE);
-    assert(strcmp(op->op_insert.op_insert_col,"C") == 0);
-    assert(op->op_insert.op_insert_val == 5);
+    assert(strcmp(op->op_insert_single.op_insert_single_col,"C") == 0);
+    assert(op->op_insert_single.op_insert_single_val == 5);
     char *s = op_string(op);
     assert(strcmp(query, s) == 0);
     free(s);
@@ -607,8 +607,8 @@ void testmultiple(void) {
 
     op = oparray_get(ops, 2);
     assert(op->op_type == OP_INSERT_SINGLE);
-    assert(strcmp(op->op_insert.op_insert_col,"D") == 0);
-    assert(op->op_insert.op_insert_val == 5);
+    assert(strcmp(op->op_insert_single.op_insert_single_col,"D") == 0);
+    assert(op->op_insert_single.op_insert_single_val == 5);
     s = op_string(op);
     assert(strcmp("insert(D,5)", s) == 0);
     free(s);

@@ -494,8 +494,8 @@ server_eval_insert(struct session *session, struct op *op)
 
     int result;
     struct column *col;
-    TRY(result, column_open(session->ses_storage, op->op_insert.op_insert_col, &col), done);
-    TRY(result, column_insert(col, op->op_insert.op_insert_val), done);
+    TRY(result, column_open(session->ses_storage, op->op_insert_single.op_insert_single_col, &col), done);
+    TRY(result, column_insert(col, op->op_insert_single.op_insert_single_val), done);
 
     // success
     result = 0;

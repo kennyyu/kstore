@@ -18,6 +18,9 @@ enum op_type {
     OP_CREATE,
     OP_LOAD,
     OP_INSERT_SINGLE,
+    OP_INSERT,
+    OP_DELETE,
+    OP_UPDATE,
     OP_TUPLE,
     OP_AGG,
     OP_MATH,
@@ -88,8 +91,23 @@ struct op_load {
 };
 
 struct op_insert_single {
-    char op_insert_col[COLUMNLEN];
-    unsigned op_insert_val;
+    char op_insert_single_col[COLUMNLEN];
+    unsigned op_insert_single_val;
+};
+
+struct op_insert {
+    char op_insert_vars[TUPLELEN];
+};
+
+struct op_delete {
+    char op_delete_var[COLUMNLEN];
+    char op_delete_cols[COLUMNLEN];
+};
+
+struct op_update {
+    char op_update_var[COLUMNLEN];
+    char op_update_col[COLUMNLEN];
+    int op_update_val;
 };
 
 struct op_agg {
@@ -126,7 +144,10 @@ struct op {
         struct op_fetch op_fetch;
         struct op_create op_create;
         struct op_load op_load;
-        struct op_insert_single op_insert;
+        struct op_insert_single op_insert_single;
+        struct op_insert op_insert;
+        struct op_delete op_delete;
+        struct op_update op_update;
         struct op_tuple op_tuple;
         struct op_agg op_agg;
         struct op_math op_math;

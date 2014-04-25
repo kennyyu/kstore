@@ -71,8 +71,8 @@ char *op_string(struct op *op) {
         break;
     case OP_INSERT_SINGLE:
         sprintf(buf, "insert(%s,%u)",
-                op->op_insert.op_insert_col,
-                op->op_insert.op_insert_val);
+                op->op_insert_single.op_insert_single_col,
+                op->op_insert_single.op_insert_single_val);
         break;
     case OP_TUPLE:
         sprintf(buf, "tuple(%s)",

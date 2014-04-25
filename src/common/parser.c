@@ -158,8 +158,8 @@ parse_line(char *line)
     }
     bzero(op, sizeof(struct op));
     if (sscanf(line, "insert(%[^,],%u)",
-        (char *) &op->op_insert.op_insert_col,
-        &op->op_insert.op_insert_val) == 2) {
+        (char *) &op->op_insert_single.op_insert_single_col,
+        &op->op_insert_single.op_insert_single_val) == 2) {
         op->op_type = OP_INSERT_SINGLE;
         goto check_extra_args;
     }
