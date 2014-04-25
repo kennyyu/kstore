@@ -9,7 +9,7 @@
 
 #define PORT 5000
 #define HOST "127.0.0.1"
-#define LOADDIR "p2tests"
+#define LOADDIR "."
 
 struct client_options client_options = {
     .copt_port = PORT,
