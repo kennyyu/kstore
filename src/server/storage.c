@@ -371,7 +371,6 @@ column_open(struct storage *storage, char *colname, struct column **retcol)
     // finally, add this column to the array of open columns
     TRY(result, columnarray_add(storage->st_open_cols, col, NULL), cleanup_lock);
     result = 0;
-    *retcol = col;
     goto done;
 
   cleanup_lock:
@@ -385,6 +384,7 @@ column_open(struct storage *storage, char *colname, struct column **retcol)
     free(col);
     col = NULL;
   done:
+    *retcol = col;
     lock_release(storage->st_lock);
     return result;
 }

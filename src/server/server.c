@@ -630,7 +630,7 @@ server_eval_update(struct session *session, struct op *op)
 
     // success
     result = 0;
-    goto done;
+    goto cleanup_col;
   cleanup_col:
     column_close(col);
   done:
