@@ -569,9 +569,28 @@ server_eval_update(struct session *session, struct op *op)
     assert(op->op_type == OP_UPDATE);
     int result = 0;
 
+    // try to find the column
+    struct column *col;
+    TRY(result, column_open(session->ses_storage, op->op_update.op_update_col, &col), done);
+
+    // try to find the variable in the environment, ensure it is ids
+    struct vartuple *idvar;
+    TRYNULL(result, DBENOVAR, idvar,
+            server_eval_get_var(session->ses_env, op->op_update.op_update_var),
+            cleanup_col);
+    if (idvar->vt_type != VAR_IDS) {
+        result = DBEVARTYPE;
+        DBLOG(result);
+        goto cleanup_col;
+    }
+    TRY(result, column_update(col, idvar->vt_column_ids, op->op_update.op_update_val),
+        cleanup_col);
+
     // success
     result = 0;
     goto done;
+  cleanup_col:
+    column_close(col);
   done:
     return result;
 }
