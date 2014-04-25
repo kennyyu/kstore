@@ -4,11 +4,15 @@ To run the test, first start the server:
 
     ./server
 
-Next, start the client, providing the appropriate
+Next, start the client and load the data, providing the appropriate
 path to the csv files as part of the "--loaddir" command line
 option:
 
-    ./client --loaddir /path/to/p3challenge/csvs < p3challenge.txt
+    ./client --loaddir /path/to/p3challenge/csvs < load.txt
+
+Next, actually perform the query:
+
+    ./client < p3challenge.txt
 
 NOTE:
 ====

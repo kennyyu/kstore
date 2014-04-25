@@ -311,7 +311,7 @@ column_open(struct storage *storage, char *colname, struct column **retcol)
     assert(retcol != NULL);
 
     lock_acquire(storage->st_lock);
-    int result;
+    int result = 0;
     struct column *col = NULL;
 
     // first check if the column is already open.
@@ -599,7 +599,7 @@ btree_insert_helper(struct file *f,
     assert(retentry != NULL);
 
     int result = 0;
-    unsigned ix; // pointer to chase for internal nodes
+    unsigned ix = 0; // pointer to chase for internal nodes
     struct btree_entry entrybuf;
     bzero(&entrybuf, sizeof(struct btree_entry));
     struct btree_node nodebuf;
@@ -1345,7 +1345,7 @@ static
 int
 column_load_unsorted(struct file *f, int *vals, uint64_t num)
 {
-    int result;
+    int result = 0;
     int intbuf[PAGESIZE / sizeof(int)];
     uint64_t curtuple = 0;
     while (curtuple < num) {

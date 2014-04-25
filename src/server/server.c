@@ -833,7 +833,7 @@ int
 server_start(struct server *s)
 {
     assert(s != NULL);
-    int result;
+    int result = 0;
     int listenfd = s->s_listenfd;
 
     // accept in a loop, waiting for more connections

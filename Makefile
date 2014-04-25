@@ -75,7 +75,7 @@ TEST_OBJS = $(addprefix $(TEST_OBJDIR)/,$(notdir $(TEST_SRCS:.c=.o)))
 TEST_BINS = $(addprefix $(TEST_OBJDIR)/,$(notdir $(TEST_SRCS:.c=)))
 
 CC = gcc
-CFLAGS = -Wall -Werror -ggdb -std=gnu99 -m32
+CFLAGS = -Wall -Werror -ggdb -std=gnu99 -m32 -O3
 LIBS = -lm -lpthread -lncurses
 
 # For OSX, assume readline already installed

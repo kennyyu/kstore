@@ -191,7 +191,7 @@ column_join_tree(struct storage *storage,
     // Maintain what we just searched for to avoid repeated accesses
     // of the btree
     struct column_ids *cids = NULL;
-    int prevval;
+    int prevval = 0;
     for (unsigned i = 0; i < inputL->cval_len; i++) {
         int curval = tuplesL[i].idval_val;
         if (cids == NULL || curval != prevval) {
