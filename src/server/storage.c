@@ -1724,7 +1724,9 @@ column_delete_unsorted(struct column *col, struct column_ids *ids)
             curpage = requestedpage;
         }
         unsigned requestedindex = id % COLENTRY_UNSORTED_PER_PAGE;
-        assert(colentrybuf[requestedindex].ce_taken);
+        // If we delete after a join, we might get repeated IDs.
+        // That's ok, a delete is idempotent. But we can't have this assertion.
+        //assert(colentrybuf[requestedindex].ce_taken);
         colentrybuf[requestedindex].ce_val = 0xDEADBEEF;
         colentrybuf[requestedindex].ce_taken = false;
         col->col_disk.cd_ntuples--;
