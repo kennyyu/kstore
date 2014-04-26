@@ -1190,6 +1190,65 @@ fetch_tuples_sort_id(struct fetch_tuple *tuples, unsigned len)
     qsort(tuples, len, sizeof(struct fetch_tuple), fetch_tuple_compare_id);
 }
 
+static
+int
+column_ids_sort(struct column_ids *ids, struct fetch_tuple **retftuples)
+{
+    assert(ids != NULL);
+    assert(retftuples != NULL);
+
+    int result;
+    struct fetch_tuple *ftuples = NULL;
+    if (ids->cid_type == CID_ARRAY) {
+        // If we have an array, sort the array so that we can
+        // fetch in sequential order. After the fetch, we sort
+        // the ftuples based on the original index to maintain
+        // alignment fetching after a join.
+        unsigned len = idarray_num(ids->cid_array);
+        TRYNULL(result, DBENOMEM, ftuples,
+                malloc(sizeof(struct fetch_tuple) * len), done);
+        for (unsigned i = 0; i < len; i++) {
+            ftuples[i].fetch_index = i;
+            ftuples[i].fetch_id = (unsigned) idarray_get(ids->cid_array, i);
+        }
+        fetch_tuples_sort_id(ftuples, len);
+        for (unsigned i = 0; i < len; i++) {
+            idarray_set(ids->cid_array, i, (void *) ftuples[i].fetch_id);
+        }
+    }
+    // success
+    result = 0;
+    goto done;
+  done:
+    *retftuples = ftuples;
+    return result;
+}
+
+static
+void
+column_ids_fix(struct column_ids *ids, struct fetch_tuple *ftuples)
+{
+    assert(ids != NULL);
+
+    if (ids->cid_type == CID_ARRAY) {
+        assert(ftuples != NULL);
+        unsigned len = idarray_num(ids->cid_array);
+        fetch_tuples_sort_index(ftuples, len);
+        for (unsigned i = 0; i < len; i++) {
+            idarray_set(ids->cid_array, i, (void *) ftuples[i].fetch_id);
+        }
+    }
+}
+
+static
+void
+column_ids_cleanup(struct fetch_tuple *ftuples)
+{
+    if (ftuples == NULL) {
+        free(ftuples);
+    }
+}
+
 // PRECONDITION: MUST BE HOLDING LOCK ON COLUMN
 static
 int
@@ -1243,6 +1302,9 @@ column_fetch(struct column *col, struct column_ids *ids)
     assert(ids != NULL);
     int result;
     struct column_vals *cvals = NULL;
+    struct fetch_tuple *ftuples = NULL;
+    struct valarray *vals = NULL;
+    struct idarray *fetchids = NULL;
 
     rwlock_acquire_read(col->col_rwlock);
     uint64_t maxtuples = col->col_disk.cd_nexttupleid;
@@ -1259,27 +1321,9 @@ column_fetch(struct column *col, struct column_ids *ids)
     default: assert(0); break;
     }
 
-    struct fetch_tuple *ftuples = NULL;
-    struct valarray *vals = NULL;
-    struct idarray *fetchids = NULL;
-
-    if (ids->cid_type == CID_ARRAY) {
-        // If we have an array, sort the array so that we can
-        // fetch in sequential order. After the fetch, we sort
-        // the ftuples based on the original index to maintain
-        // alignment fetching after a join.
-        unsigned len = idarray_num(ids->cid_array);
-        TRYNULL(result, DBENOMEM, ftuples,
-                malloc(sizeof(struct fetch_tuple) * len), done);
-        for (unsigned i = 0; i < len; i++) {
-            ftuples[i].fetch_index = i;
-            ftuples[i].fetch_id = (unsigned) idarray_get(ids->cid_array, i);
-        }
-        fetch_tuples_sort_id(ftuples, len);
-        for (unsigned i = 0; i < len; i++) {
-            idarray_set(ids->cid_array, i, (void *) ftuples[i].fetch_id);
-        }
-    } else {
+    // sort the ids to make fetching faster
+    TRY(result, column_ids_sort(ids, &ftuples), done);
+    if (ids->cid_type == CID_BITMAP) {
         TRYNULL(result, DBENOMEM, vals, valarray_create(), cleanup_temps);
         TRYNULL(result, DBENOMEM, fetchids, idarray_create(), cleanup_temps);
     }
@@ -1307,11 +1351,11 @@ column_fetch(struct column *col, struct column_ids *ids)
     TRYNULL(result, DBENOMEM, cvals->cval_ids,
             malloc(sizeof(unsigned) * cvals->cval_len), cleanup_malloc);
 
+    // fix the ids to make row alignment
+    column_ids_fix(ids, ftuples);
     if (ids->cid_type == CID_ARRAY) {
         unsigned len = idarray_num(ids->cid_array);
-        fetch_tuples_sort_index(ftuples, len);
         for (unsigned i = 0; i < len; i++) {
-            idarray_set(ids->cid_array, i, (void *) ftuples[i].fetch_id);
             cvals->cval_ids[i] = ftuples[i].fetch_id;
             cvals->cval_vals[i] = ftuples[i].fetch_val;
         }
@@ -1336,9 +1380,7 @@ column_fetch(struct column *col, struct column_ids *ids)
         fetchids->arr.num = 0;
         idarray_destroy(fetchids);
     }
-    if (ftuples != NULL) {
-        free(ftuples);
-    }
+    column_ids_cleanup(ftuples);
   done:
     rwlock_release(col->col_rwlock);
     return cvals;
@@ -1664,6 +1706,7 @@ column_update(struct column *col, struct column_ids *ids, int val)
     assert(ids != NULL);
 
     int result = 0;
+    struct fetch_tuple *ftuples = NULL;
     rwlock_acquire_write(col->col_rwlock);
 
     // Make sure the number of bits does not exceed the number of ids in the col
@@ -1680,24 +1723,8 @@ column_update(struct column *col, struct column_ids *ids, int val)
     default: assert(0); break;
     }
 
-    struct fetch_tuple *ftuples = NULL;
-    if (ids->cid_type == CID_ARRAY) {
-        // If we have an array, sort the array so that we can
-        // fetch in sequential order. After the fetch, we sort
-        // the ftuples based on the original index to maintain
-        // alignment fetching after a join.
-        unsigned len = idarray_num(ids->cid_array);
-        TRYNULL(result, DBENOMEM, ftuples,
-                malloc(sizeof(struct fetch_tuple) * len), done);
-        for (unsigned i = 0; i < len; i++) {
-            ftuples[i].fetch_index = i;
-            ftuples[i].fetch_id = (unsigned) idarray_get(ids->cid_array, i);
-        }
-        fetch_tuples_sort_id(ftuples, len);
-        for (unsigned i = 0; i < len; i++) {
-            idarray_set(ids->cid_array, i, (void *) ftuples[i].fetch_id);
-        }
-    }
+    // sort the ids to make fetching faster
+    TRY(result, column_ids_sort(ids, &ftuples), done);
 
     // We only support updates on unsorted columns
     switch(col->col_disk.cd_stype) {
@@ -1711,21 +1738,14 @@ column_update(struct column *col, struct column_ids *ids, int val)
         break;
     }
 
-    if (ids->cid_type == CID_ARRAY) {
-        unsigned len = idarray_num(ids->cid_array);
-        fetch_tuples_sort_index(ftuples, len);
-        for (unsigned i = 0; i < len; i++) {
-            idarray_set(ids->cid_array, i, (void *) ftuples[i].fetch_id);
-        }
-    }
+    // fix the ids to make row alignment
+    column_ids_fix(ids, ftuples);
 
     // success
     result = 0;
     goto done;
   done:
-    if (ftuples != NULL) {
-        free(ftuples);
-    }
+    column_ids_cleanup(ftuples);
     rwlock_release(col->col_rwlock);
     return result;
 }
@@ -1789,6 +1809,7 @@ column_delete(struct column *col, struct column_ids *ids)
     assert(ids != NULL);
 
     int result = 0;
+    struct fetch_tuple *ftuples = NULL;
     rwlock_acquire_write(col->col_rwlock);
 
     // Make sure the number of bits does not exceed the number of ids in the col
@@ -1805,24 +1826,8 @@ column_delete(struct column *col, struct column_ids *ids)
     default: assert(0); break;
     }
 
-    struct fetch_tuple *ftuples = NULL;
-    if (ids->cid_type == CID_ARRAY) {
-        // If we have an array, sort the array so that we can
-        // fetch in sequential order. After the fetch, we sort
-        // the ftuples based on the original index to maintain
-        // alignment fetching after a join.
-        unsigned len = idarray_num(ids->cid_array);
-        TRYNULL(result, DBENOMEM, ftuples,
-                malloc(sizeof(struct fetch_tuple) * len), done);
-        for (unsigned i = 0; i < len; i++) {
-            ftuples[i].fetch_index = i;
-            ftuples[i].fetch_id = (unsigned) idarray_get(ids->cid_array, i);
-        }
-        fetch_tuples_sort_id(ftuples, len);
-        for (unsigned i = 0; i < len; i++) {
-            idarray_set(ids->cid_array, i, (void *) ftuples[i].fetch_id);
-        }
-    }
+    // sort the ids to make fetching faster
+    TRY(result, column_ids_sort(ids, &ftuples), done);
 
     // We only support updates on unsorted columns
     switch(col->col_disk.cd_stype) {
@@ -1836,21 +1841,14 @@ column_delete(struct column *col, struct column_ids *ids)
         break;
     }
 
-    if (ids->cid_type == CID_ARRAY) {
-        unsigned len = idarray_num(ids->cid_array);
-        fetch_tuples_sort_index(ftuples, len);
-        for (unsigned i = 0; i < len; i++) {
-            idarray_set(ids->cid_array, i, (void *) ftuples[i].fetch_id);
-        }
-    }
+    // fix the ids to make row alignment
+    column_ids_fix(ids, ftuples);
 
     // success
     result = 0;
     goto done;
   done:
-    if (ftuples != NULL) {
-        free(ftuples);
-    }
+    column_ids_cleanup(ftuples);
     rwlock_release(col->col_rwlock);
     return result;
 }
