@@ -3,7 +3,8 @@
 #include <semaphore.h>
 #include <stdbool.h>
 #include <stdlib.h>
-#include "include/synch.h"
+#include <stddef.h>
+#include <db/common/synch.h>
 
 struct lock {
     pthread_mutex_t lk_mutex;

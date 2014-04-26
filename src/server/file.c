@@ -7,11 +7,11 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <errno.h>
-#include "include/file.h"
-#include "../../common/include/dberror.h"
-#include "../../common/include/try.h"
-#include "../../common/include/io.h"
-#include "../../common/include/bitmap.h"
+#include <db/common/dberror.h>
+#include <db/common/try.h>
+#include <db/common/io.h>
+#include <db/common/bitmap.h>
+#include <db/server/file.h>
 
 struct file {
     int f_fd;

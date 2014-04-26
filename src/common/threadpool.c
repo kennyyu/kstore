@@ -4,11 +4,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
-#include "include/synch.h"
-#include "include/list.h"
-#include "include/threadpool.h"
-#include "include/try.h"
-#include "include/dberror.h"
+#include <db/common/synch.h>
+#include <db/common/list.h>
+#include <db/common/threadpool.h>
+#include <db/common/try.h>
+#include <db/common/dberror.h>
 
 DECLLIST(job);
 DEFLIST(job);

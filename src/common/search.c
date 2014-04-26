@@ -1,5 +1,5 @@
 #include <assert.h>
-#include "include/search.h"
+#include <db/common/search.h>
 
 int
 int_compare(const void *a, const void *b)

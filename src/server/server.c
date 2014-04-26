@@ -13,19 +13,19 @@
 #include <sys/stat.h>
 #include <string.h>
 #include <unistd.h>
-#include "../common/include/io.h"
-#include "../common/include/threadpool.h"
-#include "../common/include/rpc.h"
-#include "../common/include/array.h"
-#include "../common/include/csv.h"
-#include "../common/include/search.h"
-#include "../common/include/dberror.h"
-#include "../common/include/try.h"
-#include "../common/include/results.h"
-#include "../server/include/storage.h"
-#include "include/aggregate.h"
-#include "include/join.h"
-#include "include/server.h"
+#include <db/common/io.h>
+#include <db/common/threadpool.h>
+#include <db/common/rpc.h>
+#include <db/common/array.h>
+#include <db/common/csv.h>
+#include <db/common/search.h>
+#include <db/common/dberror.h>
+#include <db/common/try.h>
+#include <db/common/results.h>
+#include <db/server/storage.h>
+#include <db/server/aggregate.h>
+#include <db/server/join.h>
+#include <db/server/server.h>
 
 static
 void

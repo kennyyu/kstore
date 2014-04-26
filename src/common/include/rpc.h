@@ -2,8 +2,8 @@
 #define _RPC_H_
 
 #include <stdint.h>
-#include "operators.h"
-#include "results.h"
+#include <db/common/operators.h>
+#include <db/common/results.h>
 
 #define RPC_HEADER_MAGIC 0xDEADBEEF
 

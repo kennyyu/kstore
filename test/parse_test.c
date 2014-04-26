@@ -3,7 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include "../src/common/include/parser.h"
+#include <db/common/parser.h>
 
 void testselectall(void) {
     char *query = "select(C)";

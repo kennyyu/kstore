@@ -9,14 +9,14 @@
 #include <stdarg.h>
 #include <string.h>
 #include <stdlib.h>
-#include "include/rpc.h"
-#include "include/io.h"
-#include "include/try.h"
-#include "include/operators.h"
-#include "include/parser.h"
-#include "include/dberror.h"
-#include "include/array.h"
-#include "include/results.h"
+#include <db/common/rpc.h>
+#include <db/common/io.h>
+#include <db/common/try.h>
+#include <db/common/operators.h>
+#include <db/common/parser.h>
+#include <db/common/dberror.h>
+#include <db/common/array.h>
+#include <db/common/results.h>
 
 static
 uint64_t

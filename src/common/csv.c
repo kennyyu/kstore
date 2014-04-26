@@ -4,10 +4,10 @@
 #include <unistd.h>
 #include <string.h>
 #include <fcntl.h>
-#include "include/csv.h"
-#include "include/array.h"
-#include "include/dberror.h"
-#include "include/try.h"
+#include <db/common/csv.h>
+#include <db/common/array.h>
+#include <db/common/dberror.h>
+#include <db/common/try.h>
 
 DEFARRAY_BYTYPE(intarray, int, /* no inline */);
 

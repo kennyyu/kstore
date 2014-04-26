@@ -3,9 +3,9 @@
 
 #include <stdint.h>
 #include <stdbool.h>
-#include "bitmap.h"
-#include "array.h"
-#include "operators.h"
+#include <db/common/bitmap.h>
+#include <db/common/array.h>
+#include <db/common/operators.h>
 
 DECLARRAY_BYTYPE(idarray, unsigned);
 

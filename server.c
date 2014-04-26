@@ -4,9 +4,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "src/common/include/dberror.h"
-#include "src/common/include/try.h"
-#include "src/server/include/server.h"
+#include <db/common/dberror.h>
+#include <db/common/try.h>
+#include <db/server/server.h>
 
 #define PORT 5000
 #define BACKLOG 16

@@ -2,7 +2,7 @@
 #define _TRY_H_
 
 #include <stddef.h>
-#include "dberror.h"
+#include <db/common/dberror.h>
 
 #define TRY(result, expr, cleanup) \
     (result) = (expr); \

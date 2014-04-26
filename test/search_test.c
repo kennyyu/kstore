@@ -1,7 +1,7 @@
 #include <assert.h>
 #include <stdlib.h>
 #include <stdio.h>
-#include "../src/common/include/search.h"
+#include <db/common/search.h>
 
 void testempty(void) {
     int arr[0];

@@ -1,9 +1,9 @@
 #ifndef _JOIN_H_
 #define _JOIN_H_
 
-#include "../../common/include/operators.h"
-#include "../../common/include/results.h"
-#include "storage.h"
+#include <db/common/operators.h>
+#include <db/common/results.h>
+#include <db/server/storage.h>
 
 int column_join(enum join_type jtype,
                 struct storage *storage,

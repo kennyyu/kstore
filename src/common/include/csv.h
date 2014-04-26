@@ -2,7 +2,7 @@
 #define _CSV_H_
 
 #include <stdio.h>
-#include "array.h"
+#include <db/common/array.h>
 
 DECLARRAY_BYTYPE(intarray, int);
 

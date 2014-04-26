@@ -15,17 +15,15 @@
 #include <sys/select.h>
 #include <sys/stat.h>
 #include <unistd.h>
-#include "../common/include/try.h"
-#include "../common/include/dberror.h"
-#include "../common/include/rpc.h"
-#include "../common/include/operators.h"
-#include "../common/include/parser.h"
-#include "../common/include/io.h"
-#include "../common/include/dberror.h"
-#include "../common/include/try.h"
-#include "include/client.h"
 #include <readline/readline.h>
 #include <readline/history.h>
+#include <db/common/try.h>
+#include <db/common/dberror.h>
+#include <db/common/rpc.h>
+#include <db/common/operators.h>
+#include <db/common/parser.h>
+#include <db/common/io.h>
+#include <db/client/client.h>
 
 struct client {
     struct client_options c_opt;

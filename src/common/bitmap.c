@@ -36,7 +36,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <assert.h>
-#include "include/bitmap.h"
+#include <db/common/bitmap.h>
 
 #define DIVROUNDUP(a,b) (((a)+(b)-1)/(b))
 #define ROUNDUP(a,b)    (DIVROUNDUP(a,b)*b)

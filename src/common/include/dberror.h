@@ -3,7 +3,7 @@
 
 #include <stdio.h>
 #include <stdbool.h>
-#include "cassert.h"
+#include <db/common/cassert.h>
 
 enum dberror {
     DBSUCCESS = 0,

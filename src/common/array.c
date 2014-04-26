@@ -33,8 +33,8 @@
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>
-#include "include/array.h"
-#include "include/dberror.h"
+#include <db/common/array.h>
+#include <db/common/dberror.h>
 
 struct array *
 array_create(void) {

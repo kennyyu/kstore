@@ -6,10 +6,10 @@
 #include <stdio.h>
 #include <string.h>
 #include <regex.h>
-#include "include/array.h"
-#include "include/try.h"
-#include "include/operators.h"
-#include "include/parser.h"
+#include <db/common/array.h>
+#include <db/common/try.h>
+#include <db/common/operators.h>
+#include <db/common/parser.h>
 
 DEFARRAY(op, /*no inline */);
 

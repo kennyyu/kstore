@@ -3,8 +3,8 @@
 #include <stdio.h>
 #include <stdbool.h>
 #include <errno.h>
-#include "include/dberror.h"
 #include <string.h>
+#include <db/common/dberror.h>
 
 const char *
 dberror_string(enum dberror result)

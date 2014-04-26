@@ -2,12 +2,12 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "../common/include/operators.h"
-#include "../common/include/results.h"
-#include "../common/include/try.h"
-#include "include/storage.h"
-#include "include/join.h"
-#include "../common/include/dberror.h"
+#include <db/common/operators.h>
+#include <db/common/results.h>
+#include <db/common/try.h>
+#include <db/common/dberror.h>
+#include <db/server/storage.h>
+#include <db/server/join.h>
 
 #define MIN(a,b) ((a) < (b)) ? (a) : (b)
 

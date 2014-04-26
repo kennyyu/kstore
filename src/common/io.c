@@ -4,8 +4,8 @@
 #include <stdint.h>
 #include <string.h>
 #include <sys/stat.h>
-#include "include/dberror.h"
-#include "include/io.h"
+#include <db/common/dberror.h>
+#include <db/common/io.h>
 
 #define BUFSIZE 4096
 #define MIN(a,b) ((a) < (b)) ? (a) : (b)

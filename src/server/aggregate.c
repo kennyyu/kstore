@@ -2,9 +2,9 @@
 #include <stdlib.h>
 #include <limits.h>
 #include <string.h>
-#include "include/aggregate.h"
-#include "../common/include/operators.h"
-#include "../common/include/try.h"
+#include <db/common/operators.h>
+#include <db/common/try.h>
+#include <db/server/aggregate.h>
 
 int
 column_agg(struct column_vals *vals,

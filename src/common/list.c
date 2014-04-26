@@ -2,8 +2,8 @@
 #include <stdlib.h>
 #include <stddef.h>
 #include <errno.h>
-#include "include/dberror.h"
-#include "include/list.h"
+#include <db/common/dberror.h>
+#include <db/common/list.h>
 
 struct listnode {
     struct listnode *ln_next;

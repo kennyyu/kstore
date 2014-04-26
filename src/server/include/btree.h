@@ -2,8 +2,8 @@
 #define _BTREE_H_
 
 #include <stdint.h>
-#include "file.h"
-#include "../../common/include/cassert.h"
+#include <db/common/cassert.h>
+#include <db/server/file.h>
 
 // INVARIANTS
 // * Allow nodes to be less than half full

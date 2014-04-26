@@ -3,13 +3,13 @@
 
 #include <stdint.h>
 #include <stdbool.h>
-#include "../../common/include/operators.h"
-#include "../../common/include/bitmap.h"
-#include "../../common/include/array.h"
-#include "file.h"
-#include "btree.h"
-#include "../../common/include/cassert.h"
-#include "../../common/include/results.h"
+#include <db/common/operators.h>
+#include <db/common/bitmap.h>
+#include <db/common/array.h>
+#include <db/common/cassert.h>
+#include <db/common/results.h>
+#include <db/server/file.h>
+#include <db/server/btree.h>
 
 #define COLUMN_TAKEN 0xCAFEBABE
 #define COLUMN_FREE 0x0

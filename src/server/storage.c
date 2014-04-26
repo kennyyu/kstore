@@ -9,15 +9,15 @@
 #include <unistd.h>
 #include <stdio.h>
 #include <stdbool.h>
-#include "include/file.h"
-#include "include/storage.h"
-#include "../common/include/operators.h"
-#include "../common/include/array.h"
-#include "../common/include/synch.h"
-#include "../common/include/search.h"
-#include "../common/include/dberror.h"
-#include "../common/include/try.h"
-#include "../common/include/results.h"
+#include <db/common/operators.h>
+#include <db/common/array.h>
+#include <db/common/synch.h>
+#include <db/common/search.h>
+#include <db/common/dberror.h>
+#include <db/common/try.h>
+#include <db/common/results.h>
+#include <db/server/file.h>
+#include <db/server/storage.h>
 
 #define METADATA_FILENAME "metadata"
 

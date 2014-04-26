@@ -1,7 +1,8 @@
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include "../src/common/include/list.h"
+#include <stddef.h>
+#include <db/common/list.h>
 
 struct num {
     int n;

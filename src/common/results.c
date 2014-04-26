@@ -3,9 +3,9 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <stdbool.h>
-#include "include/bitmap.h"
-#include "include/results.h"
-#include "include/array.h"
+#include <db/common/bitmap.h>
+#include <db/common/results.h>
+#include <db/common/array.h>
 
 DEFARRAY_BYTYPE(idarray, unsigned, /* no inline */);
 

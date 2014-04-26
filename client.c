@@ -3,9 +3,9 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
-#include "src/common/include/dberror.h"
-#include "src/common/include/try.h"
-#include "src/client/include/client.h"
+#include <db/common/dberror.h>
+#include <db/common/try.h>
+#include <db/client/client.h>
 
 #define PORT 5000
 #define HOST "127.0.0.1"
