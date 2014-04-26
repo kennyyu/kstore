@@ -26,7 +26,7 @@
 # testbin/
 #   *_test
 INCDIR = include
-OBJDIR = obj
+OBJDIR = build
 SRCDIR = src
 LIBDIR = lib
 
