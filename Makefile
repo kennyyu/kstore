@@ -30,6 +30,8 @@ OBJDIR = obj
 SRCDIR = src
 LIBDIR = lib
 
+DB_PREFIX = db
+
 SERVER = server
 CLIENT = client
 COMMON = common
@@ -39,9 +41,14 @@ UNAME := $(shell uname)
 TEST_SRCDIR = test
 TEST_OBJDIR = testbin
 
-SERVER_INCDIR = $(SRCDIR)/$(SERVER)/$(INCDIR)
-CLIENT_INCDIR = $(SRCDIR)/$(CLIENT)/$(INCDIR)
-COMMON_INCDIR = $(SRCDIR)/$(COMMON)/$(INCDIR)
+INCDIR_BASE = $(OBJDIR)/$(INCDIR)/$(DB_PREFIX)
+SERVER_INCDIR = $(INCDIR_BASE)/$(SERVER)
+CLIENT_INCDIR = $(INCDIR_BASE)/$(CLIENT)
+COMMON_INCDIR = $(INCDIR_BASE)/$(COMMON)
+
+SERVER_INCDIR_ORIG = $(SRCDIR)/$(SERVER)/$(INCDIR)
+CLIENT_INCDIR_ORIG = $(SRCDIR)/$(CLIENT)/$(INCDIR)
+COMMON_INCDIR_ORIG = $(SRCDIR)/$(COMMON)/$(INCDIR)
 
 SERVER_SRCDIR = $(SRCDIR)/$(SERVER)
 CLIENT_SRCDIR = $(SRCDIR)/$(CLIENT)
@@ -87,6 +94,12 @@ LIBS = -lm -lpthread -lncurses
 #	LIBS +=
 #endif
 
+include_path:
+	@mkdir -p $(INCDIR_BASE)
+	ln -s $(shell pwd)/$(SERVER_INCDIR_ORIG) $(SERVER_INCDIR)
+	ln -s $(shell pwd)/$(CLIENT_INCDIR_ORIG) $(CLIENT_INCDIR)
+	ln -s $(shell pwd)/$(COMMON_INCDIR_ORIG) $(COMMON_INCDIR)
+
 $(TEST_OBJDIR)/%_test: $(TEST_OBJDIR)/%_test.o $(COMMON_OBJS) $(SERVER_OBJS) $(CLIENT_OBJS)
 	$(CC) -o $@ $^ $(CFLAGS) -I$(COMMON_INCDIR) -I$(SERVER_INCDIR) -I$(CLIENT_INCDIR) \
 		$(COMMON_LIBS) $(SERVER_LIBS) $(CLIENT_LIBS) $(LIBS)
@@ -97,14 +110,20 @@ $(TEST_OBJDIR)/%.o: $(TEST_SRCDIR)/%.c $(COMMON_DEPS) $(SERVER_DEPS) $(CLIENT_DE
 
 $(COMMON_OBJDIR)/%.o: $(COMMON_SRCDIR)/%.c $(COMMON_DEPS)
 	@mkdir -p $(COMMON_OBJDIR)
+	@mkdir -p $(INCDIR_BASE)
+	@if [ ! -L $(COMMON_INCDIR) ]; then ln -s $(shell pwd)/$(COMMON_INCDIR_ORIG) $(COMMON_INCDIR); fi
 	$(CC) -c -o $@ $< $(CFLAGS) -I$(COMMON_INCDIR)
 
 $(SERVER_OBJDIR)/%.o: $(SERVER_SRCDIR)/%.c $(SERVER_DEPS) $(COMMON_OBJS) $(COMMON_DEPS)
 	@mkdir -p $(SERVER_OBJDIR)
+	@mkdir -p $(INCDIR_BASE)
+	@if [ ! -L $(SERVER_INCDIR) ]; then ln -s $(shell pwd)/$(SERVER_INCDIR_ORIG) $(SERVER_INCDIR); fi
 	$(CC) -c -o $@ $< $(CFLAGS) -I$(SERVER_INCDIR) -I$(COMMON_INCDIR)
 
 $(CLIENT_OBJDIR)/%.o: $(CLIENT_SRCDIR)/%.c $(CLIENT_DEPS) $(COMMON_OBJS) $(COMMON_DEPS)
 	@mkdir -p $(CLIENT_OBJDIR)
+	@mkdir -p $(INCDIR_BASE)
+	@if [ ! -L $(CLIENT_INCDIR) ]; then ln -s $(shell pwd)/$(CLIENT_INCDIR_ORIG) $(CLIENT_INCDIR); fi
 	$(CC) -c -o $@ $< $(CFLAGS) -I$(CLIENT_INCDIR) -I$(COMMON_INCDIR)
 
 all: server client
