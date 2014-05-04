@@ -1,0 +1,22 @@
+HOW TO RUN THE CHALLENGE:
+========================
+To run the test, first start the server:
+
+    ./server
+
+Next, start the client and load the data, providing the appropriate
+path to the csv files as part of the "--loaddir" command line
+option:
+
+    ./client --loaddir /path/to/p4challenge/csvs < load.txt
+
+Next, actually perform the query:
+
+    ./client < p4challenge.txt
+
+The expected results are in p4challenge.expected
+
+NOTE:
+====
+The column names of t.csv must be "ta,tb,tc,td", NOT "a,b,c,d".
+Similarly, the column names of u.csv must be "ua,ub,uc,ud", NOT "a,b,c,d".
