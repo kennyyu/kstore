@@ -85,7 +85,7 @@ TEST_OBJS = $(addprefix $(TEST_OBJDIR)/,$(notdir $(TEST_SRCS:.c=.o)))
 TEST_BINS = $(addprefix $(TEST_OBJDIR)/,$(notdir $(TEST_SRCS:.c=)))
 
 CC = gcc
-CFLAGS = -Wall -Werror -ggdb -std=gnu99 -m32 -I$(INCDIR_BASE) -I$(THIRDPARTY_INCDIR)
+CFLAGS = -Wall -Werror -ggdb -std=gnu99 -m32 -O3 -I$(INCDIR_BASE) -I$(THIRDPARTY_INCDIR)
 LIBS = -lm -lpthread -lncurses $(THIRDPARTY_LIBS)
 
 $(TEST_OBJDIR)/%_test: $(TEST_OBJDIR)/%_test.o $(COMMON_OBJS) $(SERVER_OBJS) $(CLIENT_OBJS)
