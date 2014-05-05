@@ -26,6 +26,11 @@ NOTES
   input to a treejoin must be values from a full selection on the
   original column.
 
+## PROJECT 4 NOTES
+
+* I added my own tests in p4tests. These can only be run once
+  (since the deletion/update/insert mutations are non idempotent).
+
 
 Building the client and server
 ==============================
@@ -95,6 +100,7 @@ Example:
 
     ./test.sh p2tests
     ./test.sh p3tests
+    ./test.sh p4tests
 
 Output:
 
