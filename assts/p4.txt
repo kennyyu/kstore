@@ -1,0 +1,103 @@
+Goal: Support updates (optionally do it quickly and/or concurrently)
+
+Due on 5/05/14 9:00 AM
+
+0. Here you will be extending your system to support changes to the base data.
+When you are finished you should push to your code.seas repository with:
+git tag -f project4-submit
+git push --tags
+
+1. Base Data Changes
+
+A. Inserts
+
+Your system already supports individual puts to a given column but until now
+there hasn't been a way to support a single insert across multiple columns. You
+should do that now.
+
+create(a,"unsorted")
+create(b,"unsorted")
+insert(a,0,b,1)
+create(c,"unsorted")
+create(d,"unsorted")
+create(e,"unsorted")
+create(f,"unsorted")
+insert(c,0,d,1,e,2,f,3)
+
+B. Deletes
+
+If you can add it you should be able to delete it too...
+
+create(c,"unsorted")
+create(d,"unsorted")
+create(e,"unsorted")
+create(f,"unsorted")
+insert(c,0,d,0,e,9,f,5)
+insert(c,7,d,3,e,8,f,3)
+insert(c,7,d,3,e,8,f,3)
+insert(c,9,d,9,e,9,f,9)
+t1=select(c,7)
+delete(t1,c,d,e,f)
+
+C. Updates
+
+Finally, the system should support changing data that it already holds:
+
+create(c,"unsorted")
+create(d,"unsorted")
+create(e,"unsorted")
+create(f,"unsorted")
+insert(c,0,d,0,e,9,f,5)
+insert(c,7,d,3,e,8,f,3)
+insert(c,7,d,3,e,8,f,3)
+insert(c,9,d,9,e,9,f,9)
+t1=select(e,9)
+update(t1,c,1)
+
+Extra:
+
+A. System Alacrity
+
+Make it go fast. As with many things in systems, first we make it produce
+correct results, then we make it go fast...as fast as possible. If you think
+this project is too easy or you don't feel like you have gotten to write enough
+code, you can make your system faster. The general idea is simple:
+(1) Find the bottleneck in your system.
+(2) remove it.
+(3) goto 1.
+
+If you are interested in doing this, look at minimizing memory usage, coalescing
+accesses, differential updates, separate read and write stores, and avoiding
+system calls (not necessarily in that order). You might also want to add
+functionality to your sorted and b-tree columns, as those will be faster at
+reads than unsorted columns. Tools like perf will be helpful here.
+
+B. Support Concurrency
+
+One of the best ways to get throughput is by paralyzing queries. If q1 is doing
+a read on columns 'a,b,c' then q2 should not block on a write to column 'e'.
+This is generally easier said than done. You will need some sort of locking
+scheme (you should look into both locks and latches). The less contention you
+have (generally by having smaller critical zones) the faster you will run.
+
+C. Speed Test
+
+Similar to Project 3, we will provide a test that your system should try to
+handle (correctly) as quickly as possible. The teams with the five fastest
+implementations get extra credit. The teams with the two fastest implementations
+get to have dinner with the staff!
+
+WHAT TO SUBMIT:
+
+  README                     - the corresponding README file
+  client.c                   - your client code
+  server.c                   - your server code
+  *.c, *.h                   - any additional sources
+  Makefile                   - the Makefile that builds everything
+  p4tests/
+    p4test*.out              - the outputs of the provided unit tests
+    *.txt, *.csv, *.out      - any other tests that you have written
+
+PUSH TO SUBMIT:
+git tag -f project4-submit
+git push --tags

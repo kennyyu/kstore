@@ -1,0 +1,270 @@
+Goal: Build a simple database system and client application capable of running
+queries from a file.
+
+Due on Wednesday, March 5, 11:59pm
+Midpoint checkin on Tuesday, February 25, 11:59pm
+See the last section on How to Submit for what is
+due by the midpoint checkin.
+
+1. Implementing a database system and client application
+
+Rules and regulations:
+
+Both your database system and client application must be written in C. Please
+name the file for your server process "server.c" and for the client "client.c"
+and include a "Makefile" that builds both of them by just typing "make". (Feel
+free to create as many .c and .h files as you need.) Your database may create
+any files that it needs, but only in the db/ subdirectory.
+
+Your database system should contain a minimal storage and execution engine
+only. No SQL parser, no query optimizer, no buffer pool. You only need to
+support integer data. The data stored in your database must be persistent but
+not fault tolerant (your system should not lose data provided the system is
+shut down gracefully): if the client inserts data, and then the database server
+is restarted, the client should still be able to access the data.
+
+The client simply sends basic non-SQL requests to the database server. You must
+support the following API:
+
+  select commands, each of which return positions of the matching data:
+    - select(C): get column C
+    - select(C,low,high): get me all data from column C where the values are
+      between low and high
+    - select(C,x): get all x values from column C
+
+  fetch command to retrieve the actual values:
+    - fetch(C,Pos): for each position stored in the (intermediate) column Pos,
+      fetch the corresponding value from column C
+
+
+  commands for creating, loading, and inserting into the database:
+    - create(C,storage): create column `C` with storage type `storage`. Storage
+      may be one of "b+tree", "sorted", or "unsorted" (see below).
+    - load(file): load the csv `file` into the table. Note that the data in the
+      file will probably not already be sorted. You do not have to handle data
+      files larger than memory.
+    - insert(C,x): insert new value x in column C
+
+All select operators must return the positions of all matching values in the
+target column in some form (position list, bitvector, etc.). The fetch operator
+takes the results of a select and retrieves the values at those locations.  For
+example, sending the following to the server:
+
+  inter=select(C,x)
+  fetch(D,inter)
+
+is equivalent to the SQL query "select D from R where C=x;", where R is the
+name for the table of this database.
+
+Your database server must be able to respond to all requests from this API
+appropriately. You must also be able to handle concurrent reads to the
+database. Do not worry about handling write requests concurrent with other
+reads or writes; i.e., you do not need to implement a locking mechanism to
+prevent concurrent writes. (NOTE: we will be handling concurrency in future
+parts of the project so while it is optional for this assignment you should
+think about how your system might implement locking.)
+
+You must design three select operators: a plain scan, a B+tree scan, and a
+binary search scan (assuming a sorted column). Which select operator you use may
+be chosen based on the storage type specified when the column was created.
+
+In your implementation, you are free to use any libraries that implement sort
+and binary search, if you need them.
+
+You will also likely make extensive use of C's socket API. If you've never
+programmed with sockets before, here is a relatively simple introduction to them
+http://www.thegeekstuff.com/2011/12/c-socket-programming/. For a much more
+in-depth introduction, see http://beej.us/guide/bgnet/. In particular, you may
+want to use the echo server implemented at
+http://beej.us/guide/bgipc/output/html/multipage/unixsock.html as a starting
+point for your database server and client application.
+
+You must implement a thread pool to handle client requests; use pthreads. A
+useful tutorial may be found at
+http://timmurphy.org/2010/05/04/pthreads-in-c-a-minimal-working-example/. Your
+thread pool can be simple and doesn't need to be especially efficient for this
+assignment. However, similar to the note on locking, your thread pool may have
+more requirements in later parts of the project.
+
+Another library that you are free to use is readline if you would like to make
+a fancy interactive client. You can also use a library for string tokenization
+and regular expressions if you find it useful for parsing. (Do not use strtok,
+but instead use its reentrant version strtok_r.) If there are any other
+libraries you're interested in using, feel free to ask the course staff.
+
+Make sure that you pass all of the provided unit tests. Starting from an empty
+database, start the server process and run the following:
+
+  ./client < p2test1.txt > p2test1.out
+  ./client < p2test2.txt > p2test2.out
+  ...
+
+And then compare your outputs to the provided p2test*.expected files. Make sure
+that the above works also for the case in which you shut down and restart the
+database process between some executions of the client process.
+
+
+2. Performance Study
+
+Perform a performance study of your various methods. Try to find where your
+design breaks. What is the biggest number of tuples you can support? What is
+the biggest number of concurrent clients you can support? These are just a few
+possible questions. Deliver a performance report explaining your findings and
+the limits of your design. The report should simply be as long as it needs to
+be (a paragraph or two is sufficient; feel free to include any figures, but
+they are not mandatory). Also include a brief discussion of the biggest
+challenge you faced in your design and the solution you implemented. Finally,
+include a brief statement explaining how you would extend your current design.
+
+
+
+3. Extras
+  - You may implement additional select operators using alternative storage
+    and/or access algorithms, like bloom filters or one of the options
+    discussed in class.
+  - A select operator that automatically decides which access method is best
+    given the query and/or the data.
+  - Implement a more complete SQL parser (e.g., using Flex and Bison).
+
+
+
+Additional Instructions
+-----------------------------------------------
+
+Setup a CS50 instance
+-----------------------------------------------
+
+
+1. Download the CS50 Appliance at https://manual.cs50.net/appliance/19/. If you
+took CS61 last semester, you already have the correct version of the appliance.
+We recommend using VMware; if you need a license for VMware Fusion for OS X,
+fill out http://cs50.net/vmap. In the meantime, you should be able to use the
+free trial of VMware Fusion 6.
+
+You are free to develop in whatever environment you prefer. However, your code
+must ultimately compile and run in the CS50 Appliance, as that is the
+environment in which we will be testing your code.
+
+2. Log in to https://code.seas.harvard.edu. You must have either a FAS account
+or a SEAS account to log in to the system. If you have neither, please apply for
+a SEAS account at https://password.seas.harvard.edu/itapps/apply/. Usually they
+are fast in responding, but it can take a bit for your account to be created.
+
+Adding an SSH key to your account on code.seas:
+-----------------------------------------------
+
+These steps are if you don't already have an SSH public key added to
+http://code.seas.harvard.edu.
+
+If you don't already have an SSH key pair generated, you'll need to generate
+one. The following steps for generating the SSH key will work exactly if working
+within the Appliance, and will likely work the same if working on any Linux or
+OS X system. In a Terminal, run `ssh-keygen`. Follow the instructions to
+generate the key. Pressing enter at each stage will specify the default
+configuration.
+
+Now that you have a key (or if you had one in the first place), head to
+your dashboard at http://code.seas.harvard.edu, select "Manage SSH keys", click
+"Add SSH key" on the left hand side", and then copy the contents of the file
+~/.ssh/id_rsa.pub into the textarea (you can do `cat ~/.ssh/id_rsa.pub` to dump
+the contents to the terminal, and copy from there). Hit "Save," and your key
+should be ready to use.
+
+Configuring git
+---------------
+(If you are unfamiliar with git we will be offering a tutorial at the beginning
+of the next TF session.)
+
+If this is your first time using git on the system (e.g., you are working in a
+new Appliance), you'll want to configure some global state. Run these commands
+at the command line:
+
+git config --global user.name "YOUR FULL NAME".
+git config --global user.email "YOUR HARVARD EMAIL ADDRESS".
+
+Depending on the version of git (including the version of git in the Appliance),
+you will also want to run a command like the following to suppress some warnings
+when you push:
+
+git config --global push.default matching
+
+Creating a project and repository and adding cs165-staff as a collaborator:
+---------------------------------------------------------------------------
+
+Once logged in to the dashboard at https://code.seas.harvard.edu, on the right
+side under "Your projects", select "Create a new project". Name your project
+"username-cs165", replacing "username" with your username at code.seas. Then
+give the repo a brief description ("My project for CS165" is fine). Hit
+"Create project".
+
+You will automatically be instructed to add a new repository to this project.
+You may use the default name (which is the same as the repo) or choose a new
+one. Click "Create repository".
+
+After the repository is created (it takes a few seconds), first make note of the
+"Clone and push urls" (it should begin with "git@code.seas.harvard.edu:...").
+You'll need this in a moment. Select "Manage collaborators" from the right
+sidebar. Then click "Add collaborators" on the right side again, click on the
+"Add a team" tab, and give the team "cs165-staff" Review permission on the repo.
+Finally, click "Add as collaborator".
+
+Making your first commit:
+-------------------------
+
+At the main page of your repo, copy the aforementioned "Clone and push url". At
+a terminal, enter:
+
+git clone CLONE_URL
+
+where CLONE_URL is the copied URL. You may get a warning about the repo being
+empty; this is fine. `cd` into the created directory and execute the following:
+
+touch README
+git add README
+git commit -m "initial commit"
+git push -u origin master
+
+(From this point on you can just type "git push" to push back to the code.seas
+repo). At this point, you are ready to begin working. Commit often!!! You
+should consider committing any addition that compiles cleanly (and even some
+that don't if you have written a lot of code). Be conscientious about
+committing and pushing your code so that you don't lose any work.
+
+
+How to submit
+-------------------------
+
+When you are ready to submit, commit all of your changes, and execute the
+following:
+
+git tag -f project2-submit
+git push --tags
+
+(for the midpoint check-in, use the tag "project2-checkin").
+
+Note that you may execute these commands multiple times if you decide to submit
+again. Only the most recently tagged commit will actually have the tag; it will
+be removed from prior commits.
+
+You must include in your submission scripts that load data and repeat your most
+important test scenarios. Indicate in the README if there's anything special we
+need to do to run these.
+
+By the midpoint check-in deadline, your code must contain all of the
+functionality described in this specification with the exception of the B+tree.
+In other words, things should be fundamentally working using the sorted and
+unsorted storage engines. We expect the implementation of the B+tree and
+the performance study to take up the remaining week.
+
+WHAT TO SUBMIT:
+
+  README                     - the corresponding README file
+  client.c                   - your client code
+  server.c                   - your server code
+  *.c, *.h                   - any additional sources
+  Makefile                   - the Makefile that builds everything
+  p2report.txt or .pdf       - your performance report
+  p2tests/
+    p2test*.out              - the outputs of the provided unit tests
+    *.txt, *.csv, *.out      - any other tests that you have written (optional)
+

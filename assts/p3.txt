@@ -1,0 +1,133 @@
+CS165: Data Systems. Project 3.
+
+Goal: Add math, aggregation, and join operators to your database system
+      and write query plans.
+
+Design document 3/14/14
+Everything Due on 3/28/14
+
+0. In this part of the project you will be measuring performance. Your
+algorithms should be cache conscious throughout your design. The design
+document can be in .txt or .pdf format and should be pushed to your code.seas
+repository with:
+git tag -f project3-design
+git push --tags
+
+1. Aggregation operators.
+
+Your system needs to support min, max, sum, avg (average), and count operators. 
+
+t1=select(a,3)
+t2=fetch(b,t1)
+t3=min(t2)
+t4=max(t2)
+tuple(t3,t4)
+
+This should print the minimum and maximum values in the rows of column b where
+column a equals 3.
+
+Note that "avg" returns an integer, so:
+
+create(a,"unsorted")
+insert(a,1)
+insert(a,2)
+t1=select(a)
+t2=fetch(a,t1)
+t3=avg(t2)
+tuple(t3)
+
+This is expected to print (1), not (1.5).
+
+2. Math operators
+
+You need to support "add" (addition), "sub" (subtraction), "mul"
+(multiplication), and "div" (division). Note that division is expected to
+perform integer division; floating point values should not be returned.
+The API is as follows:
+
+t1=select(a,3)
+t2=fetch(b,t1)
+t3=fetch(c,t1)
+t4=fetch(d,t1)
+t5=add(t2,t3)
+t6=sub(t5,t4)
+tuple(t6)
+
+This selects where a equals 3, and returns "b + c - d" of those rows.
+
+3. Join operators
+
+You need to support 4 join operators: hash join (hashjoin), sorted merge join
+(sortjoin), nested loop join (loopjoin), and b+tree join(treejoin). You can
+now support a query similar to those in the slides of class 10:
+
+(SQL)
+SELECT max(r.d),min(s.g)
+FROM r,s
+WHERE r.a=s.a 
+    AND r.c >= 1
+    AND r.c =< 9
+    AND s.f >= 31
+    AND s.f =< 99;
+
+(your store)
+rc_inter=select(rc,1,9)
+sf_inter=select(sf,31,99)
+join_input1=fetch(ra,rc_inter)
+join_input2=fetch(sa,sf_inter)
+r_results,s_results=hashjoin(join_input1,join_input2)
+rd_values=fetch(rd,r_results)
+sg_values=fetch(sg,s_results)
+minr=min(rd_values)
+maxs=max(sg_values)
+tuple(minr,maxs)
+
+***CHALLENGE***
+The fastest student implementation will win the hearts and minds of the
+teaching staff.
+
+4. You will need to implement "print" command that can print the value of any
+variable, including intermediate results. This will be helpful for debugging
+and will be used later when we have student-staff meetings.
+
+5. You will need an interactive mode. When we start your client we should get a
+prompt from which we can issue commands line by line (we strongly encourage you
+to use libreadline, read: you have to use libreadline).
+
+6. Performance Study
+
+Perform a performance study of your various methods. Try to find where your
+design breaks. Deliver a performance report explaining your findings and
+the limits of your design. The report should simply be as long as it needs to
+be (a paragraph or two is sufficient; feel free to include any figures, but
+they are not mandatory). Also include a brief discussion of the biggest
+challenge you faced in your design and the solution you implemented. Finally,
+include a brief statement explaining how you would extend your current design.
+
+7. Replay it in your favorite DB
+Put your column data from this assignment into a postgres or MySQL database.
+Run your performance tests in both your system and the 3-party db. Report and
+compare the results [Charts get ++points!]
+
+8. Extra:
+create vectorized plans. Compare against bulk processing
+create early materialization plans and compare against late materialization
+create a group by operator using your hash table
+support larger than memory data.
+
+
+WHAT TO SUBMIT:
+
+  README                     - the corresponding README file
+  client.c                   - your client code
+  server.c                   - your server code
+  *.c, *.h                   - any additional sources
+  Makefile                   - the Makefile that builds everything
+  p3report.txt or .pdf       - your performance report
+  p3tests/
+    p3test*.out              - the outputs of the provided unit tests
+    *.txt, *.csv, *.out      - any other tests that you have written
+
+PUSH TO SUBMIT:
+git tag -f project3-submit
+git push --tags
