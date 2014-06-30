@@ -1,6 +1,7 @@
 Kolumn Store
 ============
 Kenny Yu
+
 CS165 - Data Systems
 
 
@@ -17,7 +18,7 @@ It supports a limited form of SQL, including operations for:
 * insertions, deletions, and updates on unsorted columns only
 
 For examples, see the tests
-[here](https://bitbucket.org/kennaryisland/cs165-project-tests).
+[here](https://bitbucket.org/kennaryisland/cs165-project-tests/src).
 
 
 Building the client and server
