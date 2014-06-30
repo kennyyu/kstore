@@ -1,39 +1,29 @@
 Kenny Yu
 CS165 - Column Store
 
-NOTES
+About
 =====
 
-* When cloning for the first time:
+This is the column store I built as a project for my data systems class.
+It supports a limited form of SQL, including operations for:
 
-    git submodule init
-    git submodule update
+* creating unsorted, sorted, and btree columns
+* point selections and range selections over unsorted, sorted, and btree columns
+* fetching over unsorted, sorted, and btree columns
+* performing joins (loop, merge, sorted, and hash joins)
+* insertions, deletions, and updates on unsorted columns only
 
-## PROJECT 2 NOTES
-
-* Since p2test1c.txt inserts (instead of loading)
-  values into t1a, t2a, t2c without inserting
-  corresponding values into the other columns of that table, then
-  after running p2test1c.txt, we can no longer run p2test1a.txt and
-  p2test1b.txt because there will be rows with extra t1a, t2a, and t2c
-  values, breaking the assertion that the selections always return
-  the same number of items.
-
-## PROJECT 3 NOTES
-
-* I modified p3test1.txt to perform a full selection on the right column
-  before attempting to perform a treejoin. I require that the right
-  input to a treejoin must be values from a full selection on the
-  original column.
-
-## PROJECT 4 NOTES
-
-* I added my own tests in p4tests. These can only be run once
-  (since the deletion/update/insert mutations are non idempotent).
+For examples, see the tests
+[here](https://bitbucket.org/kennaryisland/cs165-project-tests).
 
 
 Building the client and server
 ==============================
+
+When cloning for the first time:
+
+    git submodule init
+    git submodule update
 
 To build the client and server:
 
@@ -180,3 +170,20 @@ the time to perform the query in mysql and in my database.
     ./test_sql.sh # run and time the mysql query
     ./test_server.sh # start the server, do this in a separate shell
     ./test_client {hash | client | sort | loop} # perform the join in my db
+
+
+NOTES
+=====
+
+* Since p2test1c.txt inserts (instead of loading)
+  values into t1a, t2a, t2c without inserting
+  corresponding values into the other columns of that table, then
+  after running p2test1c.txt, we can no longer run p2test1a.txt and
+  p2test1b.txt because there will be rows with extra t1a, t2a, and t2c
+  values, breaking the assertion that the selections always return
+  the same number of items.
+
+* I modified p3test1.txt to perform a full selection on the right column
+  before attempting to perform a treejoin. I require that the right
+  input to a treejoin must be values from a full selection on the
+  original column.
