@@ -1,5 +1,8 @@
+Kolumn Store
+============
 Kenny Yu
-CS165 - Column Store
+CS165 - Data Systems
+
 
 About
 =====
