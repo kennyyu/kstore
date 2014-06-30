@@ -175,7 +175,7 @@ the time to perform the query in mysql and in my database.
     ./test_client {hash | client | sort | loop} # perform the join in my db
 
 
-NOTES
+Notes
 =====
 
 * Since p2test1c.txt inserts (instead of loading)
